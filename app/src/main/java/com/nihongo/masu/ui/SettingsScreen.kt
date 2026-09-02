@@ -74,6 +74,19 @@ fun SettingsScreen(store: Store) {
             ) { s.kana = it }
         }
 
+        SectionLabel("묻는 방향")
+        MasuCard {
+            Text(
+                "단어 맞추기에서 단어와 한자를 어느 쪽으로 물을지입니다. 「그때그때 " +
+                    "고르기」면 범위를 누를 때마다 물어보고, 하나로 고정해 두면 안 묻고 " +
+                    "바로 시작합니다. 기록은 방향과 무관하게 한 벌입니다.",
+                fontSize = 12.sp,
+                color = m.sumi3
+            )
+            Spacer(Modifier.height(8.dp))
+            AskRows(s.ask, auto = true) { s.ask = it }
+        }
+
         SectionLabel("한 묶음 구성")
         MasuCard {
             Text(

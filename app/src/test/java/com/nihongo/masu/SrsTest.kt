@@ -89,6 +89,25 @@ class SrsTest {
         assertEquals(q, Srs.requeue(q, 2, gap = 3, pool = pool, recOf = rec, limit = 4))
     }
 
+    @Test fun `자리채우개는 열쇠가 같은 다른 방향 카드를 끌어오지 않는다`() {
+        // 묻는 방향이 카드에 실리면 같은 글자가 통에 방향마다 한 장씩 들어 있다.
+        // 카드 자체를 비교하면 d를 두 방향으로 두 장 끌어와 한 묶음에 두 번 나온다.
+        data class Card(val key: String, val dir: Int)
+
+        val q = listOf(Card("a", 0), Card("b", 0), Card("c", 0))
+        val pool = listOf("a", "b", "c", "d", "e")
+            .flatMap { listOf(Card(it, 0), Card(it, 1)) }
+        val learned = mapOf("d" to Rec(last = 10), "e" to Rec(last = 20))
+
+        val out = Srs.requeue(
+            q, 2, gap = 3, pool = pool,
+            idOf = { it.key }, recOf = { learned[it.key] }
+        )
+
+        // d·e를 한 장씩. 맨 뒤 c는 방금 틀려서 다시 끼운 카드다.
+        assertEquals(listOf("a", "b", "c", "d", "e", "c"), out.map { it.key })
+    }
+
     @Test fun `계속 틀려도 묶음은 상한에서 멈춘다`() {
         // 맞힐 때까지 붙잡아 두면 그날 학습이 끝나지 않는다. 상한에서 손을 뗀다.
         val pool = (0 until 60).map { it.toString() }
@@ -139,6 +158,24 @@ class SrsTest {
 
         val tight = Srs.queue(items, 3, today, Srs.DEFAULT_FRESH, { it }, { recs[it] })
         assertFalse("익힘이 먼저 들어감: $tight", "mastered" in tight)
+    }
+
+    @Test fun `섞은 통에서 카드마다 방향이 하나만 랜덤으로 남는다`() {
+        // Ask.MIX는 통에 방향마다 한 장씩 넣고 이 중복 제거에 기댄다.
+        // 열쇠가 같으니 한 묶음에는 한 장만 남고, 버킷이 섞인 뒤라 어느 쪽인지는 랜덤이다.
+        data class Card(val key: String, val dir: Int)
+
+        val items = listOf("a", "b", "c", "d").flatMap { listOf(Card(it, 0), Card(it, 1)) }
+        val dirs = mutableSetOf<Int>()
+
+        repeat(50) {
+            val out = Srs.queue(items, 4, today, 4, { it.key }, { null })
+            // 같은 글자가 두 번 들어가면 방향만 바뀐 같은 문제를 연달아 푼다.
+            assertEquals(4, out.size)
+            assertEquals(out.size, out.map { it.key }.distinct().size)
+            dirs += out.map { it.dir }
+        }
+        assertEquals("방향이 한쪽으로만 나옴", setOf(0, 1), dirs)
     }
 
     @Test fun `복습할 때가 된 약한 카드가 일반 복습보다 먼저 뽑힌다`() {

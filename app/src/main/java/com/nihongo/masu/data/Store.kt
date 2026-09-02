@@ -19,21 +19,6 @@ fun cardIds(scripts: List<Script>): List<String> =
         VocabData.all.map { it.id }
 
 /**
- * 실제로 복습 일정이 걸리는 기록 열쇠. 단어와 한자는 묻는 방향마다
- * 따로 세므로 [cardIds]보다 많다.
- *
- * "몇 자를 익혔나"는 [cardIds]로, "복습이 몇 개 밀렸나"는 이쪽으로 센다.
- * 둘을 한 목록으로 합치면 분모가 뛰어서 익힘 비율이 뜻을 잃는다.
- */
-fun studyIds(scripts: List<Script>): List<String> {
-    val kanjiTails = QuizMode.suffixes(CardKind.KANJI)
-    val wordTails = QuizMode.suffixes(CardKind.WORD)
-    return KanaData.all.flatMap { k -> scripts.map { k.id(it) } } +
-        KanjiData.all.flatMap { k -> kanjiTails.map { k.id + it } } +
-        VocabData.all.flatMap { w -> wordTails.map { w.id + it } }
-}
-
-/**
  * 화면을 밝게 볼지 어둡게 볼지. [SYSTEM]은 기기 설정을 따른다.
  *
  * 기본값이 [SYSTEM]이라 기기가 어두우면 앱도 어두워진다. 그게 싫은 사람이
@@ -83,6 +68,17 @@ class Settings(private val prefs: SharedPreferences) {
     /** 한 묶음 크기. 큐 상한과 진행 막대의 분모가 쓴다. */
     val batch: Int get() = fresh + review
 
+    /**
+     * 단어·한자를 어느 방향으로 물을지. null이면 범위를 누를 때마다 물어본다.
+     *
+     * 기본을 null로 두는 이유는, 고정값을 기본으로 하면 다른 방향을 한 번
+     * 해보려고 설정까지 들어가야 하기 때문이다. 매번 같은 것을 고르는 사람은
+     * 자연히 여기서 고정하게 된다.
+     */
+    var ask: Ask? by Pref(
+        runCatching { Ask.valueOf(prefs.getString(KEY_ASK, null) ?: "") }.getOrNull()
+    )
+
     /** 소리 없이 연습. 자동 재생만 끄고, 직접 누른 재생은 그대로 난다. */
     var silent: Boolean by Pref(prefs.getBoolean(KEY_SILENT, false))
 
@@ -109,6 +105,8 @@ class Settings(private val prefs: SharedPreferences) {
             .putInt(KEY_FRESH, fresh)
             .putString(KEY_THEME, theme.name)
             .putBoolean(KEY_KANA, kana)
+            // null은 키를 지운다 — 「그때그때 고르기」가 그 상태다.
+            .putString(KEY_ASK, ask?.name)
             .apply()
     }
 
@@ -125,7 +123,7 @@ class Settings(private val prefs: SharedPreferences) {
         private const val KEY_FRESH = "set_fresh"
         private const val KEY_REVIEW = "set_review"
         private const val KEY_THEME = "set_theme"
-        /** 이름만 바꿨다. 값은 이미 깔린 앱에서 이어받는다. */
+        private const val KEY_ASK = "set_ask"
         private const val KEY_KANA = "set_kana"
     }
 }
@@ -161,7 +159,6 @@ class Store(context: Context) {
      * 다시 켜면 그대로 돌아온다.
      */
     val activeCardIds: List<String> get() = cardIds(kanaScripts)
-    val activeStudyIds: List<String> get() = studyIds(kanaScripts)
 
     /** 최근 학습한 날들(일수). 홈의 연속기록 점이 이걸로 그려진다. */
     private val _days = mutableStateOf<List<Long>>(emptyList())
@@ -239,9 +236,9 @@ class Store(context: Context) {
     /**
      * 채점을 기록한다.
      *
-     * [traceScore]를 주면 따라쓰기 결과도 같은 자리에서 함께 남긴다. 듣고 쓰기처럼
-     * 한 문제가 둘 다 남기는 화면이 [trace]를 따로 부르면 [touchToday]가 두 번 돌아
-     * 한 문제가 하루 목표를 둘씩 올린다.
+     * [traceScore]를 주면 손글씨 모양 점수도 같은 자리에서 함께 남긴다. 듣고 쓰기가
+     * 한 문제로 채점과 모양 점수를 둘 다 남기는데, 이것을 두 번에 나눠 부르면
+     * [touchToday]가 두 번 돌아 한 문제가 하루 목표를 둘씩 올린다.
      */
     fun grade(id: String, rating: Rating, traceScore: Int? = null) {
         val cur = records[id] ?: Rec()
@@ -274,14 +271,6 @@ class Store(context: Context) {
     private fun forgetUndo() {
         undoId = null
         undoPrev = null
-    }
-
-    /** 따라쓰기 연습 결과를 기록한다. */
-    fun trace(id: String, score: Int) {
-        val cur = records[id] ?: Rec()
-        records[id] = Srs.trace(cur, score, today())
-        touchToday()
-        persist()
     }
 
     /** 오답 노트에서 지운다. 다시 처음부터 배우는 셈이 된다. */
@@ -325,13 +314,13 @@ class Store(context: Context) {
      * 학습 기록([records])과 따로 둔다 — 1분에 수십 장을 치는 놀이라 복습 일정에
      * 흘리면 사다리가 뜻을 잃는다. 백업에도 안 담는다. 점수판이지 기록이 아니다.
      */
-    fun speedBest(script: Script): Int = prefs.getInt(KEY_SPEED + script.name.lowercase(), 0)
+    fun speedBest(key: String): Int = prefs.getInt(KEY_SPEED + key, 0)
 
     /** 최고점을 넘겼으면 갈아 끼우고 그랬다고 알려 준다. 한 판에 한 번만 부른다 —
      *  설정 저장이 그렇듯 이 한 줄도 파일 전체를 다시 쓴다. */
-    fun recordSpeed(script: Script, score: Int): Boolean {
-        if (score <= speedBest(script)) return false
-        prefs.edit().putInt(KEY_SPEED + script.name.lowercase(), score).apply()
+    fun recordSpeed(key: String, score: Int): Boolean {
+        if (score <= speedBest(key)) return false
+        prefs.edit().putInt(KEY_SPEED + key, score).apply()
         return true
     }
 

@@ -38,9 +38,6 @@ private data class Row4(
     val link: LinkLine? = null
 )
 
-/** 뜻을 묻는 기본 방향은 표시하지 않고, 나머지 방향만 꼬리표를 붙인다. */
-private fun dir(mode: QuizMode) = if (mode.suffix.isEmpty()) "" else " · ${mode.label}"
-
 private enum class Filter(val label: String) {
     DUE("오늘 복습"), WEAK("자주 틀림"), WRONG("틀린 적 있음"), ALL("배운 카드 전체")
 }
@@ -75,32 +72,25 @@ private fun rowsOf(store: Store): List<Row4> {
             }
         }
     }
-    // 단어·한자는 묻는 방향마다 기록이 따로 있다. 방향을 빼놓으면
-    // 역방향에서만 틀린 카드가 오답 노트에 아예 안 뜬다.
+    // 한자·단어는 방향이 어느 쪽이든 기록이 한 벌이라 한 줄씩이다.
     KanjiData.all.forEach { k ->
-        QuizMode.of(CardKind.KANJI).distinctBy { it.suffix }.forEach { mode ->
-            val id = k.id + mode.suffix
-            store.get(id)?.let { r ->
-                out.add(
-                    Row4(
-                        id, k.c, "${k.level.label} · ${k.on}${dir(mode)}", k.mean, r, k.exRead,
-                        saysOf(k), linksOf(k)
-                    )
+        store.get(k.id)?.let { r ->
+            out.add(
+                Row4(
+                    k.id, k.c, "${k.level.label} · ${k.on}", k.mean, r, k.exRead,
+                    saysOf(k), linksOf(k)
                 )
-            }
+            )
         }
     }
     VocabData.all.forEach { w ->
-        QuizMode.of(CardKind.WORD).distinctBy { it.suffix }.forEach { mode ->
-            val id = w.id + mode.suffix
-            store.get(id)?.let { r ->
-                out.add(
-                    Row4(
-                        id, w.w, "${w.level.label} · ${w.read}${dir(mode)}", w.mean, r, w.read,
-                        saysOf(w), linksOf(w)
-                    )
+        store.get(w.id)?.let { r ->
+            out.add(
+                Row4(
+                    w.id, w.w, "${w.level.label} · ${w.read}", w.mean, r, w.read,
+                    saysOf(w), linksOf(w)
                 )
-            }
+            )
         }
     }
     return out
@@ -171,8 +161,8 @@ private fun ReviewList(
         // 요약
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatBox("익힘", store.countMastered(store.activeCardIds).toString(), m.ok, Modifier.weight(1f))
-            StatBox("복습 대기", store.countDue(store.activeStudyIds).toString(), m.ai, Modifier.weight(1f))
-            StatBox("자주 틀림", store.countWeak(store.activeStudyIds).toString(), m.shu, Modifier.weight(1f))
+            StatBox("복습 대기", store.countDue(store.activeCardIds).toString(), m.ai, Modifier.weight(1f))
+            StatBox("자주 틀림", store.countWeak(store.activeCardIds).toString(), m.shu, Modifier.weight(1f))
         }
 
         if (shown.isNotEmpty()) {

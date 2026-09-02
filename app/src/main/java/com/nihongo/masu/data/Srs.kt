@@ -172,6 +172,11 @@ object Srs {
      * 곧바로 다시 나오고, 또 틀리면 그 한 장만 되풀이된다. 그래서 [pool]에서 카드를
      * 끌어와 자리를 만든다.
      *
+     * 이미 나온 카드인지는 [idOf]가 뽑는 열쇠로 본다. 카드에 묻는 방향이 실리면 같은
+     * 글자가 통에 방향마다 한 장씩 들어 있어서, 카드 자체를 비교하면 큐에 있는
+     * `あ`(로마자) 옆에 `あ`(듣고 쓰기)를 끌어와 한 묶음에 같은 글자가 두 번 나온다.
+     * 끌어온 것들 사이에서도 같은 이유로 열쇠가 겹치면 안 된다.
+     *
      * 끌어올 카드는 이미 배운 것만 쓴다 — 본 지 오래된 것부터([recOf]의 `last`).
      * 새 카드로 자리를 띄우지는 않는다. 자리채우개로 부른 카드는 채점할 수 없어서,
      * 화면마다 「이 카드는 세지 않는다」는 예외를 달고 다녀야 했다. 배운 카드가
@@ -187,13 +192,19 @@ object Srs {
         gap: Int = LAPSE_GAP.random(),
         pool: List<T> = emptyList(),
         limit: Int = Int.MAX_VALUE,
+        idOf: (T) -> String = { it.toString() },
         recOf: (T) -> Rec? = { null }
     ): List<T> {
         if (index !in queue.indices || queue.size >= limit) return queue
         val need = index + gap - queue.size
         val grown = if (need <= 0) queue else {
-            val seen = queue.toHashSet()
-            val fill = pool.filter { it !in seen && recOf(it) != null }
+            val seen = queue.mapTo(HashSet()) { idOf(it) }
+            val fill = pool.filter { idOf(it) !in seen && recOf(it) != null }
+                // 열쇠가 같은 카드 중 어느 방향이 남을지는 [queue]가 버킷을 섞어
+                // 정하는 것과 같은 식으로 맡긴다. 통 순서를 그대로 쓰면 자리채우개가
+                // 늘 첫 방향으로만 나온다.
+                .shuffled()
+                .distinctBy { idOf(it) }
                 .sortedBy { recOf(it)?.last }
                 .take(need)
             if (fill.size < need || queue.size + fill.size >= limit) return queue

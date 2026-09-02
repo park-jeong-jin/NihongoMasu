@@ -1,8 +1,6 @@
 package com.nihongo.masu.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -17,8 +15,26 @@ import com.nihongo.masu.draw.ShapeCompare
 import com.nihongo.masu.draw.WritingBox
 import com.nihongo.masu.tts.Speaker
 
-/** 한 문제의 진행 단계. */
-private enum class Phase { WRITING, REVEALED }
+/**
+ * 듣고 쓰기 한 문제의 화면 상태.
+ *
+ * [KanaPractice]가 쥔다 — 되돌리면 정답을 펼친 자리로 돌아가야 하고, 그 복원은
+ * [QuizSession.record]의 `restore`가 부모에서 부른다. 쓴 획은 비우지 않고 그대로
+ * 두어 무엇을 썼는지 다시 본다.
+ */
+@Stable
+class DictationState {
+    /** 정답을 겹쳐 보여주는 중인가. false면 아직 쓰는 중이다. */
+    var revealed by mutableStateOf(false)
+    var result by mutableStateOf<ShapeCompare.Result?>(null)
+    val hand = HandwritingState()
+
+    fun clear() {
+        revealed = false
+        result = null
+        hand.clear()
+    }
+}
 
 /**
  * 가나 듣고 쓰기 — 글자를 보여주지 않고 발음만 들려준다.
@@ -27,80 +43,40 @@ private enum class Phase { WRITING, REVEALED }
  * 맞는지 점수를 낸다. 점수는 참고용이고 최종 판단은 네 등급 중에서 직접 고른다.
  */
 @Composable
-fun DictationBody(
+fun DictationCard(
     store: Store,
     speaker: Speaker,
+    session: QuizSession<KanaCard>,
+    kana: Kana,
     script: Script,
-    onClose: () -> Unit
+    state: DictationState,
+    onClear: () -> Unit
 ) {
     val m = LocalMasu.current
-
-    var phase by remember { mutableStateOf(Phase.WRITING) }
-    var result by remember { mutableStateOf<ShapeCompare.Result?>(null) }
-
-    val hand = remember { HandwritingState() }
-
-    // 학습 순서: 약한 글자와 복습할 글자를 먼저 뽑는다.
-    val session = rememberQuizSession(store, { k: Kana -> k.id(script) }) { KanaData.all }
     val verdict = session.verdict
-
-    fun rebuild() {
-        session.rebuild()
-        phase = Phase.WRITING
-        result = null
-        hand.clear()
-    }
-
-    LaunchedEffect(script) { rebuild() }
-
-    val kana = session.card
-    val glyph = kana?.glyph(script) ?: ""
+    val hand = state.hand
+    val glyph = kana.glyph(script)
 
     // 새 문제가 나오면 자동으로 한 번 읽어 준다. TTS 초기화가 비동기라
     // 앱을 켠 직후 첫 문제가 무음으로 지나가지 않도록 ready도 열쇠로 둔다.
     // 소리 없이 연습이 켜져 있으면 자동 재생만 건너뛴다 — 「다시 듣기」는 그대로 난다.
     val silent = store.settings.silent
-    LaunchedEffect(kana?.id(script), script, speaker.ready, silent) {
-        if (!silent && kana != null && speaker.ready) speaker.speak(glyph)
+    LaunchedEffect(kana.id(script), script, speaker.ready, silent) {
+        if (!silent && speaker.ready) speaker.speak(glyph)
     }
 
     // 소리를 안 낼 때는 문제를 로마자로 낸다. 안 그러면 낼 문제가 없다.
     val showRomaji = silent || !speaker.available
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
-        if (session.done) {
-            CycleDone(session, onClose) { rebuild() }
-            return@Column
-        }
+    fun answer(rating: Rating) = session.grade(
+        rating,
+        // 모양 점수까지 한 번에 넘긴다. 따로 남기면 하루 목표가 한 문제에 둘씩 오른다.
+        traceScore = state.result?.score,
+        restore = { state.revealed = true },
+        then = onClear
+    )
 
-        if (kana == null) {
-            NothingDue(store)
-            return@Column
-        }
-
-        fun answer(rating: Rating) = session.grade(
-            rating,
-            // 모양 점수까지 한 번에 넘긴다. 따로 store.trace를 부르면 하루 목표가
-            // 한 문제에 둘씩 오른다.
-            traceScore = result?.score,
-            // 되돌리면 정답을 펼친 자리로 돌아온다. 쓴 획은 그대로 두어 무엇을
-            // 썼는지 다시 본다.
-            restore = { phase = Phase.REVEALED }
-        ) {
-            phase = Phase.WRITING
-            result = null
-            hand.clear()
-        }
-
-        // 진행 상황
-        QuizHeader(session, script.label)
-
+    Column {
         Spacer(Modifier.height(18.dp))
 
         if (!speaker.available && !silent) {
@@ -127,7 +103,7 @@ fun DictationBody(
             Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            if (phase == Phase.WRITING) {
+            if (!state.revealed) {
                 Text(
                     if (showRomaji) "로마자를 보고 칸에 써 보세요" else "들리는 소리를 칸에 써 보세요",
                     fontSize = 13.sp,
@@ -172,11 +148,11 @@ fun DictationBody(
 
         WritingBox(
             state = hand,
-            guide = null,                                        // 정답을 미리 보여주지 않는다
-            overlay = if (phase == Phase.REVEALED) glyph else null,
+            // 정답을 미리 보여주지 않는다 — 빈 칸에 기억해서 쓴다
+            overlay = if (state.revealed) glyph else null,
             overlayColor = m.shu,
             showCross = true,
-            enabled = phase == Phase.WRITING,
+            enabled = !state.revealed,
             inkColor = m.sumi,
             gridColor = m.rule,
             paperColor = m.card
@@ -184,7 +160,7 @@ fun DictationBody(
 
         Spacer(Modifier.height(14.dp))
 
-        if (phase == Phase.WRITING) {
+        if (!state.revealed) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GhostButton("다시 듣기", { speaker.speak(glyph) }, Modifier.weight(1f))
                 GhostButton("한 획 지우기", { hand.undo() }, Modifier.weight(1f))
@@ -197,15 +173,15 @@ fun DictationBody(
                     {
                         val user = hand.toMask()
                         val target = GlyphRaster.mask(glyph)
-                        result = ShapeCompare.compare(user, target)
-                        phase = Phase.REVEALED
+                        state.result = ShapeCompare.compare(user, target)
+                        state.revealed = true
                     },
                     Modifier.weight(1f)
                 )
             }
         } else {
             // 채점 결과
-            val r = result
+            val r = state.result
             if (r != null) {
                 MasuCard(Modifier.shake(verdict.shakeKey), glow = verdict.glow()) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -245,15 +221,7 @@ fun DictationBody(
 
             RatingRow { answer(it) }
             Spacer(Modifier.height(8.dp))
-            GhostButton(
-                "다시 쓰기",
-                {
-                    phase = Phase.WRITING
-                    result = null
-                    hand.clear()
-                },
-                Modifier.fillMaxWidth()
-            )
+            GhostButton("다시 쓰기", { state.clear() }, Modifier.fillMaxWidth())
         }
     }
 }
