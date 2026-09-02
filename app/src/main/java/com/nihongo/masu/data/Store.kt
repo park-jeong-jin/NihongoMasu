@@ -124,7 +124,6 @@ class Settings(private val prefs: SharedPreferences) {
         private const val KEY_REVIEW = "set_review"
         private const val KEY_THEME = "set_theme"
         private const val KEY_ASK = "set_ask"
-        /** 이름만 바꿨다. 값은 이미 깔린 앱에서 이어받는다. */
         private const val KEY_KANA = "set_kana"
     }
 }
