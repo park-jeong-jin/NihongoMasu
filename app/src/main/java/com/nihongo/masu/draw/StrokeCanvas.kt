@@ -211,8 +211,6 @@ object GlyphRaster {
  * 손으로 쓰는 정사각형 칸.
  *
  * @param state 필기 상태
- * @param guide 배경에 회색으로 깔아 줄 글자. null이면 빈 칸.
- * @param guideAlpha 안내 글자의 진하기 0f..1f
  * @param overlay 채점 후 정답을 겹쳐 보여줄 글자. null이면 표시하지 않는다.
  * @param showCross 십자 안내선 표시 여부
  * @param inkWidth 획 굵기. 화면 밀도에 따라 굵기가 달라지지 않도록 dp로 받는다.
@@ -220,9 +218,7 @@ object GlyphRaster {
 @Composable
 fun WritingBox(
     state: HandwritingState,
-    guide: String?,
     modifier: Modifier = Modifier,
-    guideAlpha: Float = 0.16f,
     overlay: String? = null,
     overlayColor: Color = Color(0xFFCE3A2C),
     showCross: Boolean = true,
@@ -294,11 +290,6 @@ fun WritingBox(
                     )
                     x += dash * 2
                 }
-            }
-
-            // 배경 안내 글자
-            if (guide != null) {
-                drawGlyph(guide, inkColor.copy(alpha = guideAlpha))
             }
 
             // 사용자 획

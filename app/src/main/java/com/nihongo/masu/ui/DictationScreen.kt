@@ -172,7 +172,7 @@ fun DictationBody(
 
         WritingBox(
             state = hand,
-            guide = null,                                        // 정답을 미리 보여주지 않는다
+            // 정답을 미리 보여주지 않는다 — 빈 칸에 기억해서 쓴다
             overlay = if (phase == Phase.REVEALED) glyph else null,
             overlayColor = m.shu,
             showCross = true,

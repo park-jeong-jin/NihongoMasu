@@ -12,13 +12,13 @@ import com.nihongo.masu.data.*
 import com.nihongo.masu.tts.Speaker
 
 /**
- * 가나를 익히는 네 가지 방식. 같은 글자를 손으로, 자판으로, 귀로 돌려 본다.
+ * 가나를 익히는 세 가지 방식. 같은 글자를 자판으로, 귀로, 손으로 돌려 본다.
  *
  * [SPEED]만 성격이 다르다 — 익히는 자리가 아니라 얼마나 붙었는지 재는 자리라
  * 복습 기록을 건드리지 않는다.
  */
 enum class KanaMode(val label: String) {
-    TRACE("써보기"), ROMAJI("로마자"), DICTATION("듣고 쓰기"), SPEED("스피드")
+    ROMAJI("로마자"), DICTATION("듣고 쓰기"), SPEED("스피드")
 }
 
 /**
@@ -37,7 +37,7 @@ fun KanaFlow(
     onClose: () -> Unit
 ) {
     var script by remember { mutableStateOf(Script.HIRA) }
-    var mode by remember { mutableStateOf(KanaMode.TRACE) }
+    var mode by remember { mutableStateOf(KanaMode.ROMAJI) }
 
     if (practicing) {
         Column(Modifier.fillMaxSize()) {
@@ -50,7 +50,6 @@ fun KanaFlow(
             )
             Box(Modifier.weight(1f)) {
                 when (mode) {
-                    KanaMode.TRACE -> TraceBody(store, speaker, script, onClose)
                     KanaMode.ROMAJI -> RomajiBody(store, script, onClose)
                     KanaMode.DICTATION -> DictationBody(store, speaker, script, onClose)
                     KanaMode.SPEED -> SpeedBody(store, script, onClose)
@@ -83,7 +82,7 @@ private fun KanaScopeMenu(store: Store, onPick: (Script) -> Unit) {
     ) {
         Text(
             "익힐 서체를 고르세요. 청음·탁음·요음을 섞어서 냅니다.\n" +
-                "안에서 써보기·로마자·듣고 쓰기·스피드를 바꿔 가며 합니다.",
+                "안에서 로마자·듣고 쓰기·스피드를 바꿔 가며 합니다.",
             fontSize = 13.sp,
             color = m.sumi3,
             modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)

@@ -239,9 +239,9 @@ class Store(context: Context) {
     /**
      * 채점을 기록한다.
      *
-     * [traceScore]를 주면 따라쓰기 결과도 같은 자리에서 함께 남긴다. 듣고 쓰기처럼
-     * 한 문제가 둘 다 남기는 화면이 [trace]를 따로 부르면 [touchToday]가 두 번 돌아
-     * 한 문제가 하루 목표를 둘씩 올린다.
+     * [traceScore]를 주면 손글씨 모양 점수도 같은 자리에서 함께 남긴다. 듣고 쓰기가
+     * 한 문제로 채점과 모양 점수를 둘 다 남기는데, 이것을 두 번에 나눠 부르면
+     * [touchToday]가 두 번 돌아 한 문제가 하루 목표를 둘씩 올린다.
      */
     fun grade(id: String, rating: Rating, traceScore: Int? = null) {
         val cur = records[id] ?: Rec()
@@ -274,14 +274,6 @@ class Store(context: Context) {
     private fun forgetUndo() {
         undoId = null
         undoPrev = null
-    }
-
-    /** 따라쓰기 연습 결과를 기록한다. */
-    fun trace(id: String, score: Int) {
-        val cur = records[id] ?: Rec()
-        records[id] = Srs.trace(cur, score, today())
-        touchToday()
-        persist()
     }
 
     /** 오답 노트에서 지운다. 다시 처음부터 배우는 셈이 된다. */
