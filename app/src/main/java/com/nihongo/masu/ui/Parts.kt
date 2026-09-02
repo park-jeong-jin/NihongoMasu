@@ -403,6 +403,7 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
         else _queue.value = Srs.requeue(
             queue, index, pool = pool(),
             limit = store.settings.batch * Srs.SESSION_CAP,
+            idOf = idOf,
             recOf = { store.get(idOf(it)) }
         )
     }
