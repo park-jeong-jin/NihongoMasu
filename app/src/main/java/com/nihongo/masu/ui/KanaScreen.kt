@@ -11,14 +11,9 @@ import androidx.compose.ui.unit.sp
 import com.nihongo.masu.data.*
 import com.nihongo.masu.tts.Speaker
 
-/**
- * 가나를 익히는 세 가지 방식. 같은 글자를 자판으로, 귀로, 손으로 돌려 본다.
- *
- * [SPEED]만 성격이 다르다 — 익히는 자리가 아니라 얼마나 붙었는지 재는 자리라
- * 복습 기록을 건드리지 않는다.
- */
+/** 가나를 익히는 두 가지 방식. 같은 글자를 자판으로, 그리고 귀와 손으로 돌려 본다. */
 enum class KanaMode(val label: String) {
-    ROMAJI("로마자"), DICTATION("듣고 쓰기"), SPEED("스피드")
+    ROMAJI("로마자"), DICTATION("듣고 쓰기")
 }
 
 /**
@@ -52,7 +47,6 @@ fun KanaFlow(
                 when (mode) {
                     KanaMode.ROMAJI -> RomajiBody(store, script, onClose)
                     KanaMode.DICTATION -> DictationBody(store, speaker, script, onClose)
-                    KanaMode.SPEED -> SpeedBody(store, script, onClose)
                 }
             }
         }
@@ -82,7 +76,7 @@ private fun KanaScopeMenu(store: Store, onPick: (Script) -> Unit) {
     ) {
         Text(
             "익힐 서체를 고르세요. 청음·탁음·요음을 섞어서 냅니다.\n" +
-                "안에서 로마자·듣고 쓰기·스피드를 바꿔 가며 합니다.",
+                "안에서 로마자·듣고 쓰기를 바꿔 가며 합니다.",
             fontSize = 13.sp,
             color = m.sumi3,
             modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)

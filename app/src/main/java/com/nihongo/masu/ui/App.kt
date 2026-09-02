@@ -50,6 +50,7 @@ import kotlinx.coroutines.launch
 enum class Feature(val label: String) {
     KANA("가나 맞추기"),
     SELF("단어 맞추기"),
+    SPEED("스피드"),
     REVIEW("오답 노트")
 }
 
@@ -254,6 +255,7 @@ fun App(store: Store, speaker: Speaker) {
                         when (target) {
                             Feature.KANA -> KanaFlow(store, speaker, practicing, open) { pop() }
                             Feature.SELF -> WordQuizFlow(store, speaker, practicing, open) { pop() }
+                            Feature.SPEED -> SpeedFlow(store, practicing, open) { pop() }
                             Feature.REVIEW -> ReviewFlow(store, speaker, practicing, open) { pop() }
                         }
                     }
@@ -288,8 +290,8 @@ private fun SrsExplainer(onDismiss: () -> Unit) {
                         "${Srs.LAPSE_GAP.first}~${Srs.LAPSE_GAP.last}장 뒤에 한 번 더 묻습니다. " +
                         "묶음 끝이라 자리가 없으면 다음 묶음 맨 앞에 나옵니다. " +
                         "${Srs.MASTERED_BOX}단계에 닿으면 '익힘'으로 넘어가 복습 목록에서 빠집니다.\n\n" +
-                        "단어와 한자는 묻는 방향마다(뜻·듣기) 기록을 따로 셉니다. " +
-                        "보고 아는 것과 듣고 아는 것은 다른 능력이라서입니다.",
+                        "단어와 한자는 어느 방향으로 물어도 기록이 한 벌입니다. " +
+                        "「일↔한」으로 두면 같은 카드를 물을 때마다 방향이 바뀝니다.",
                     fontSize = 13.sp,
                     color = m.sumi2,
                     lineHeight = 21.sp
@@ -418,12 +420,12 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
 
         val tiles = listOfNotNull(
             if (kanaIds.isEmpty()) null else Tile(
-                Feature.KANA, "써보기·로마자·듣고 쓰기.",
+                Feature.KANA, "로마자와 듣고 쓰기를 섞어서.",
                 "가나 익힘 ${kanaStages[Stage.MASTERED] ?: 0}",
                 kanaStages, kanaIds.size, m.ai
             ),
             Tile(
-                Feature.SELF, "뜻·듣기·빈칸으로 묻습니다.",
+                Feature.SELF, "일→한·한→일로 묻습니다.",
                 "단어 ${VocabData.all.size} · 한자 ${KanjiData.all.size}",
                 store.countStages(selfIds), selfIds.size, m.gold
             ),

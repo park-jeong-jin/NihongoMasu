@@ -72,6 +72,18 @@ class DataTest {
         assertTrue("예문에 단어가 없음: ${bad.map { it.w to it.ex }}", bad.isEmpty())
     }
 
+    @Test fun `오답 후보는 정답도 동의어도 안 내고 세 장을 채운다`() {
+        // 동의어가 오답으로 오면 뜻을 알고 있어도 틀린 것이 된다.
+        // 후보가 모자라면 4지선다가 3지선다가 되어 찍을 확률이 올라간다.
+        VocabData.all.forEach { w ->
+            val out = VocabData.distractors(w)
+            assertEquals("후보가 모자람: ${w.w}", 3, out.size)
+            assertTrue("정답이 섞임: ${w.w}", out.none { it.w == w.w })
+            assertTrue("같은 뜻이 섞임: ${w.w}", out.none { it.mean == w.mean })
+            assertEquals("후보끼리 겹침: ${w.w}", 3, out.distinctBy { it.w }.size)
+        }
+    }
+
     @Test fun `카드 열쇠가 서로 겹치지 않는다`() {
         // 가나·한자·단어가 한 맵에 같이 들어가므로 열쇠가 겹치면 기록이 섞인다.
         val ids = cardIds(Script.entries)

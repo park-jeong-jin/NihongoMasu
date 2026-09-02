@@ -315,13 +315,13 @@ class Store(context: Context) {
      * 학습 기록([records])과 따로 둔다 — 1분에 수십 장을 치는 놀이라 복습 일정에
      * 흘리면 사다리가 뜻을 잃는다. 백업에도 안 담는다. 점수판이지 기록이 아니다.
      */
-    fun speedBest(script: Script): Int = prefs.getInt(KEY_SPEED + script.name.lowercase(), 0)
+    fun speedBest(key: String): Int = prefs.getInt(KEY_SPEED + key, 0)
 
     /** 최고점을 넘겼으면 갈아 끼우고 그랬다고 알려 준다. 한 판에 한 번만 부른다 —
      *  설정 저장이 그렇듯 이 한 줄도 파일 전체를 다시 쓴다. */
-    fun recordSpeed(script: Script, score: Int): Boolean {
-        if (score <= speedBest(script)) return false
-        prefs.edit().putInt(KEY_SPEED + script.name.lowercase(), score).apply()
+    fun recordSpeed(key: String, score: Int): Boolean {
+        if (score <= speedBest(key)) return false
+        prefs.edit().putInt(KEY_SPEED + key, score).apply()
         return true
     }
 
