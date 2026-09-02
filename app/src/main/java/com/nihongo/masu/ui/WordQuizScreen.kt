@@ -53,6 +53,8 @@ private const val HINT_RECALL = "일본어로 어떻게 쓰는지 떠올려 보�
  * 역추적할 수 없어서 실제로 떠올렸는지가 그대로 드러난다.
  *
  * 묻는 방향은 [Ask]로 고른다 — 일본어를 보고 뜻을, 뜻을 보고 일본어를, 또는 섞어서.
+ * 고르는 자리는 범위를 누르는 순간이다. 방향을 바꾸면 어차피 묶음이 새로 깔리므로
+ * 판 도중에 바꾸는 값이 아니라 판을 시작하는 값이다. 설정에서 고정해 두면 안 묻는다.
  *
  * 범위 목록 → 카드 두 단계다. 범위는 JLPT 등급 × (한자 전체 | 단어 분류)다.
  */
@@ -69,14 +71,31 @@ fun WordQuizFlow(
     var tag by remember { mutableStateOf(VocabData.ALL_TAGS) }
     var dir by remember { mutableStateOf(Ask.MIX) }
 
+    // 설정이 「그때그때 고르기」일 때 팝업을 띄우려고 잡아 두는 범위.
+    var pending by remember { mutableStateOf<Pair<CardKind, String>?>(null) }
+
+    fun start(k: CardKind, t: String, d: Ask) {
+        kind = k
+        tag = t
+        dir = d
+        pending = null
+        onOpen()
+    }
+
     if (practicing) {
-        WordQuizScreen(store, speaker, level, kind, tag, dir, onClose) { dir = it }
+        WordQuizScreen(store, speaker, level, kind, tag, dir, onClose)
     } else {
         WordScopeMenu(store, level, { level = it }) { k, t ->
-            kind = k
-            tag = t
-            onOpen()
+            val fixed = store.settings.ask
+            if (fixed == null) pending = k to t else start(k, t, fixed)
         }
+    }
+
+    pending?.let { (k, t) ->
+        AskDialog(
+            scope = if (k == CardKind.KANJI) "${level.label} 한자" else "${level.label} $t",
+            onDismiss = { pending = null }
+        ) { start(k, t, it) }
     }
 }
 
@@ -92,6 +111,7 @@ private fun WordScopeMenu(
     onPick: (CardKind, String) -> Unit
 ) {
     val m = LocalMasu.current
+    val fixed = store.settings.ask
     Column(
         Modifier
             .fillMaxSize()
@@ -107,7 +127,8 @@ private fun WordScopeMenu(
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            "떠올려 볼 범위를 고르세요. 묻는 방향은 안에서 바꿉니다.",
+            if (fixed == null) "떠올려 볼 범위를 고르세요. 누르면 무엇을 물을지 고릅니다."
+            else "떠올려 볼 범위를 고르세요. 묻는 방향은 「${fixed.label}」입니다 — 설정에서 바꿉니다.",
             fontSize = 13.sp,
             color = m.sumi3
         )
@@ -163,8 +184,7 @@ private fun WordQuizScreen(
     kind: CardKind,
     tag: String,
     dir: Ask,
-    onClose: () -> Unit,
-    onDir: (Ask) -> Unit
+    onClose: () -> Unit
 ) {
     val m = LocalMasu.current
 
@@ -198,14 +218,6 @@ private fun WordQuizScreen(
             .padding(horizontal = 16.dp)
             .padding(bottom = 24.dp)
     ) {
-        SegmentedRow(
-            options = Ask.entries.toList(),
-            selected = dir,
-            label = { it.label },
-            onSelect = onDir
-        )
-        Spacer(Modifier.height(14.dp))
-
         if (session.done) {
             CycleDone(session, onClose) { rebuild() }
             return@Column

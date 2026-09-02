@@ -18,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nihongo.masu.data.Ask
 import com.nihongo.masu.data.Rating
 import com.nihongo.masu.data.Rec
 import com.nihongo.masu.data.Srs
@@ -961,6 +963,88 @@ fun ConfirmDialog(
                 Text(confirmLabel, color = m.shu)
             }
         },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
+        containerColor = m.card,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+/** 고르기 목록에 붙일 한 줄 설명. */
+private fun noteOf(dir: Ask) = when (dir) {
+    Ask.SHOW -> "일본어를 보고 뜻과 읽기를 떠올립니다"
+    Ask.RECALL -> "뜻을 보고 일본어를 떠올립니다"
+    Ask.MIX -> "카드마다 방향을 섞어서 냅니다"
+}
+
+/** 고르기 목록의 한 줄. 고른 줄은 강조되고 오른쪽에 표시가 붙는다. */
+@Composable
+private fun PickRow(title: String, note: String, on: Boolean, onClick: () -> Unit) {
+    val m = LocalMasu.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .semantics { selected = on }
+            .pressSurface(
+                RoundedCornerShape(12.dp),
+                if (on) m.sunk else Color.Transparent,
+                role = Role.RadioButton
+            ) { onClick() }
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = if (on) m.ai else m.sumi
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(note, fontSize = 12.sp, color = m.sumi3)
+        }
+        if (on) Text("✓", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = m.ai)
+    }
+}
+
+/**
+ * 무엇을 물을지 고르는 줄들. 범위를 누를 때 뜨는 팝업과 설정이 같이 쓴다 —
+ * 목록이 두 군데서 어긋날 자리를 없앤다.
+ *
+ * @param selected 지금 고른 것. null이면 「그때그때 고르기」다.
+ * @param auto 「그때그때 고르기」 줄을 맨 위에 넣는다. 설정만 쓴다 — 팝업에서
+ *             그것을 또 고르게 하면 무엇을 물을지가 안 정해진다.
+ */
+@Composable
+fun AskRows(selected: Ask?, auto: Boolean, onPick: (Ask?) -> Unit) {
+    Column(Modifier.selectableGroup()) {
+        if (auto) {
+            PickRow(
+                "그때그때 고르기",
+                "범위를 누를 때마다 물어봅니다",
+                selected == null
+            ) { onPick(null) }
+        }
+        Ask.entries.forEach { dir ->
+            PickRow(dir.label, noteOf(dir), selected == dir) { onPick(dir) }
+        }
+    }
+}
+
+/**
+ * 범위를 누른 자리에서 뜨는 방향 고르기.
+ *
+ * 방향을 바꾸면 어차피 묶음이 새로 깔린다. 판 도중에 바꾸는 값이 아니라
+ * 판을 시작하는 값이라, 고르는 자리를 시작하는 자리에 둔다.
+ */
+@Composable
+fun AskDialog(scope: String, onDismiss: () -> Unit, onPick: (Ask) -> Unit) {
+    val m = LocalMasu.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("$scope · 무엇을 물을까요?") },
+        text = { AskRows(selected = null, auto = false) { if (it != null) onPick(it) } },
+        confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("취소") } },
         containerColor = m.card,
         shape = RoundedCornerShape(20.dp)

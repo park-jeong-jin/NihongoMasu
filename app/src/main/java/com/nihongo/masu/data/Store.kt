@@ -68,6 +68,17 @@ class Settings(private val prefs: SharedPreferences) {
     /** 한 묶음 크기. 큐 상한과 진행 막대의 분모가 쓴다. */
     val batch: Int get() = fresh + review
 
+    /**
+     * 단어·한자를 어느 방향으로 물을지. null이면 범위를 누를 때마다 물어본다.
+     *
+     * 기본을 null로 두는 이유는, 고정값을 기본으로 하면 다른 방향을 한 번
+     * 해보려고 설정까지 들어가야 하기 때문이다. 매번 같은 것을 고르는 사람은
+     * 자연히 여기서 고정하게 된다.
+     */
+    var ask: Ask? by Pref(
+        runCatching { Ask.valueOf(prefs.getString(KEY_ASK, null) ?: "") }.getOrNull()
+    )
+
     /** 소리 없이 연습. 자동 재생만 끄고, 직접 누른 재생은 그대로 난다. */
     var silent: Boolean by Pref(prefs.getBoolean(KEY_SILENT, false))
 
@@ -94,6 +105,8 @@ class Settings(private val prefs: SharedPreferences) {
             .putInt(KEY_FRESH, fresh)
             .putString(KEY_THEME, theme.name)
             .putBoolean(KEY_KANA, kana)
+            // null은 키를 지운다 — 「그때그때 고르기」가 그 상태다.
+            .putString(KEY_ASK, ask?.name)
             .apply()
     }
 
@@ -110,6 +123,7 @@ class Settings(private val prefs: SharedPreferences) {
         private const val KEY_FRESH = "set_fresh"
         private const val KEY_REVIEW = "set_review"
         private const val KEY_THEME = "set_theme"
+        private const val KEY_ASK = "set_ask"
         /** 이름만 바꿨다. 값은 이미 깔린 앱에서 이어받는다. */
         private const val KEY_KANA = "set_kana"
     }
