@@ -2,7 +2,6 @@ package com.nihongo.masu
 
 import com.nihongo.masu.data.Jlpt
 import com.nihongo.masu.data.cardIds
-import com.nihongo.masu.data.studyIds
 import com.nihongo.masu.data.KanaData
 import com.nihongo.masu.data.KanjiData
 import com.nihongo.masu.data.Script
@@ -10,7 +9,6 @@ import com.nihongo.masu.data.VocabData
 import com.nihongo.masu.data.isKanji
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -74,26 +72,18 @@ class DataTest {
         assertTrue("예문에 단어가 없음: ${bad.map { it.w to it.ex }}", bad.isEmpty())
     }
 
-    @Test fun `빈칸 채우기는 예문에서 그 단어를 지운다`() {
-        VocabData.all.forEach {
-            val blanked = it.clozed()
-            assertNotEquals("빈칸이 안 뚫림: ${it.w} / ${it.ex}", it.ex, blanked)
-            assertTrue("빈칸 표시가 없음: ${it.w} → $blanked", blanked.contains("◯◯"))
-        }
-    }
-
-    @Test fun `방향별 열쇠가 서로 겹치지 않는다`() {
-        val study = studyIds(Script.entries)
-        assertEquals(study.size, study.distinct().size)
-        assertTrue(study.containsAll(cardIds(Script.entries)))
+    @Test fun `카드 열쇠가 서로 겹치지 않는다`() {
+        // 가나·한자·단어가 한 맵에 같이 들어가므로 열쇠가 겹치면 기록이 섞인다.
+        val ids = cardIds(Script.entries)
+        assertEquals(ids.size, ids.distinct().size)
     }
 
     @Test fun `서체가 하나도 없으면 가나 열쇠만 빠진다`() {
         // 설정에서 가나를 끈 상태(Store.kanaScripts가 빈 목록)에서 세는 범위다.
-        val none = studyIds(emptyList())
+        val none = cardIds(emptyList())
         val kanaKeys = Script.entries.flatMap { sc -> KanaData.all.map { it.id(sc) } }.toSet()
         assertTrue(none.none { it in kanaKeys })
-        assertEquals(studyIds(Script.entries).size - kanaKeys.size, none.size)
+        assertEquals(cardIds(Script.entries).size - kanaKeys.size, none.size)
     }
 
     @Test fun `가나를 끄면 익힘 분모에서 208장이 빠진다`() {
@@ -106,20 +96,18 @@ class DataTest {
 
     @Test fun `서체를 끄면 그 서체의 열쇠만 빠진다`() {
         val kanaCount = KanaData.all.size
-        listOf(::cardIds, ::studyIds).forEach { build ->
-            val both = build(Script.entries.toList())
-            val hiraOnly = build(listOf(Script.HIRA))
-            val kataOnly = build(listOf(Script.KATA))
+        val both = cardIds(Script.entries.toList())
+        val hiraOnly = cardIds(listOf(Script.HIRA))
+        val kataOnly = cardIds(listOf(Script.KATA))
 
-            assertEquals(both.size - kanaCount, hiraOnly.size)
-            assertEquals(both.size - kanaCount, kataOnly.size)
-            // 한자·단어 열쇠는 양쪽에 그대로 있고, 가나만 한 벌씩 빠진다.
-            val hiraKeys = KanaData.all.map { it.id(Script.HIRA) }.toSet()
-            val kataKeys = KanaData.all.map { it.id(Script.KATA) }.toSet()
-            assertTrue(hiraOnly.none { it in kataKeys })
-            assertTrue(kataOnly.none { it in hiraKeys })
-            assertTrue(both.containsAll(hiraOnly) && both.containsAll(kataOnly))
-        }
+        assertEquals(both.size - kanaCount, hiraOnly.size)
+        assertEquals(both.size - kanaCount, kataOnly.size)
+        // 한자·단어 열쇠는 양쪽에 그대로 있고, 가나만 한 벌씩 빠진다.
+        val hiraKeys = KanaData.all.map { it.id(Script.HIRA) }.toSet()
+        val kataKeys = KanaData.all.map { it.id(Script.KATA) }.toSet()
+        assertTrue(hiraOnly.none { it in kataKeys })
+        assertTrue(kataOnly.none { it in hiraKeys })
+        assertTrue(both.containsAll(hiraOnly) && both.containsAll(kataOnly))
     }
 
     @Test fun `한자 예시 읽기도 가나다`() {

@@ -19,21 +19,6 @@ fun cardIds(scripts: List<Script>): List<String> =
         VocabData.all.map { it.id }
 
 /**
- * 실제로 복습 일정이 걸리는 기록 열쇠. 단어와 한자는 묻는 방향마다
- * 따로 세므로 [cardIds]보다 많다.
- *
- * "몇 자를 익혔나"는 [cardIds]로, "복습이 몇 개 밀렸나"는 이쪽으로 센다.
- * 둘을 한 목록으로 합치면 분모가 뛰어서 익힘 비율이 뜻을 잃는다.
- */
-fun studyIds(scripts: List<Script>): List<String> {
-    val kanjiTails = QuizMode.suffixes(CardKind.KANJI)
-    val wordTails = QuizMode.suffixes(CardKind.WORD)
-    return KanaData.all.flatMap { k -> scripts.map { k.id(it) } } +
-        KanjiData.all.flatMap { k -> kanjiTails.map { k.id + it } } +
-        VocabData.all.flatMap { w -> wordTails.map { w.id + it } }
-}
-
-/**
  * 화면을 밝게 볼지 어둡게 볼지. [SYSTEM]은 기기 설정을 따른다.
  *
  * 기본값이 [SYSTEM]이라 기기가 어두우면 앱도 어두워진다. 그게 싫은 사람이
@@ -161,7 +146,6 @@ class Store(context: Context) {
      * 다시 켜면 그대로 돌아온다.
      */
     val activeCardIds: List<String> get() = cardIds(kanaScripts)
-    val activeStudyIds: List<String> get() = studyIds(kanaScripts)
 
     /** 최근 학습한 날들(일수). 홈의 연속기록 점이 이걸로 그려진다. */
     private val _days = mutableStateOf<List<Long>>(emptyList())

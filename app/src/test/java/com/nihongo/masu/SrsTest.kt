@@ -160,6 +160,24 @@ class SrsTest {
         assertFalse("익힘이 먼저 들어감: $tight", "mastered" in tight)
     }
 
+    @Test fun `섞은 통에서 카드마다 방향이 하나만 랜덤으로 남는다`() {
+        // Ask.MIX는 통에 방향마다 한 장씩 넣고 이 중복 제거에 기댄다.
+        // 열쇠가 같으니 한 묶음에는 한 장만 남고, 버킷이 섞인 뒤라 어느 쪽인지는 랜덤이다.
+        data class Card(val key: String, val dir: Int)
+
+        val items = listOf("a", "b", "c", "d").flatMap { listOf(Card(it, 0), Card(it, 1)) }
+        val dirs = mutableSetOf<Int>()
+
+        repeat(50) {
+            val out = Srs.queue(items, 4, today, 4, { it.key }, { null })
+            // 같은 글자가 두 번 들어가면 방향만 바뀐 같은 문제를 연달아 푼다.
+            assertEquals(4, out.size)
+            assertEquals(out.size, out.map { it.key }.distinct().size)
+            dirs += out.map { it.dir }
+        }
+        assertEquals("방향이 한쪽으로만 나옴", setOf(0, 1), dirs)
+    }
+
     @Test fun `복습할 때가 된 약한 카드가 일반 복습보다 먼저 뽑힌다`() {
         val recs = mapOf(
             "plain" to Rec(box = 1, due = today - 1, ok = 1),

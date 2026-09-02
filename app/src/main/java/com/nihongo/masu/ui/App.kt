@@ -160,7 +160,7 @@ fun App(store: Store, speaker: Speaker) {
                 Spacer(Modifier.height(10.dp))
 
                 Text(
-                    "오늘 복습할 카드 ${store.countDue(store.activeStudyIds)}장",
+                    "오늘 복습할 카드 ${store.countDue(store.activeCardIds)}장",
                     Modifier.padding(horizontal = 28.dp),
                     fontSize = 12.sp,
                     color = m.sumi3
@@ -326,11 +326,9 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     val kanaIds = KanaData.all.flatMap { k -> store.kanaScripts.map { k.id(it) } }
     val selfIds = remember { KanjiData.all.map { it.id } + VocabData.all.map { it.id } }
 
-    // 밀린 복습은 방향별 카드까지 세고, 진행 구간은 글자·단어 수로 센다.
-    val allStudyIds = store.activeStudyIds
     val allCardIds = store.activeCardIds
-    val due = store.countDue(allStudyIds)
-    val weak = store.countWeak(allStudyIds)
+    val due = store.countDue(allCardIds)
+    val weak = store.countWeak(allCardIds)
     val stages = store.countStages(allCardIds)
     val mastered = stages[Stage.MASTERED] ?: 0
     val learning = (stages[Stage.LEARNING] ?: 0) + (stages[Stage.YOUNG] ?: 0)

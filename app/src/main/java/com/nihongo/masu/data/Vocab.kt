@@ -15,26 +15,14 @@ data class Word(
 
     /**
      * 활용하는 단어는 예문에서 어미가 바뀐다. 어간까지만 잘라 두면
-     * 예문 안에서 이 단어를 찾을 수 있다.
+     * 예문 안에서 이 단어를 찾을 수 있다 — `DataTest`가 모든 단어의 예문에
+     * 그 단어가 실제로 들어 있는지 이것으로 확인한다.
      */
     fun stem(): String = when {
         w == "する" -> "し"                      // 불규칙: する → します
         w.endsWith("する") -> w.dropLast(2)      // 준비する → 준비
         w.length >= 2 -> w.dropLast(1)           // 行く → 行, 楽しい → 楽し
         else -> w
-    }
-
-    /**
-     * 예문에서 이 단어를 가린 문장. 빈칸 채우기에 쓴다.
-     *
-     * ponytail: 어간으로 지울 때는 예문 안 다른 낱말에 같은 글자가 있으면
-     * 거기까지 뚫린다. 빈칸이 하나 더 생기는 정도라 그대로 둔다.
-     * 거슬리면 Word에 빈칸 위치를 직접 적는 칸을 하나 만든다.
-     */
-    fun clozed(mask: String = "◯◯"): String {
-        if (ex.contains(w)) return ex.replace(w, mask)
-        val stem = stem()
-        return if (stem.isNotEmpty() && ex.contains(stem)) ex.replace(stem, mask) else ex
     }
 }
 
