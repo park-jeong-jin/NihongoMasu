@@ -1,0 +1,77 @@
+일본어 마스 (NihongoMasu)
+Copyright (c) 2026 jj.park
+
+이 저장소는 라이선스가 둘로 나뉩니다.
+
+  코드 (app/src/main/java/**, 빌드 파일)      MIT — LICENSE 참고
+  학습 데이터 (app/src/main/resources/*.tsv)  CC BY-SA 4.0 — 아래 참고
+
+학습 데이터인 kanji.tsv(1,031자)와 vocab.tsv(5,171개)는 아래 공개 자료를 골라
+합치고 고쳐서 만든 2차적 저작물입니다. 그중 KANJIDIC2가 CC BY-SA 4.0이므로
+두 파일 전체를 같은 조건으로 배포합니다 — 가져다 쓰고 고치고 파는 것 모두
+되지만, 다시 배포할 때는 출처를 밝히고 같은 라이선스를 유지해야 합니다.
+
+JLPT 등급은 원본을 그대로 쓰지 않았습니다. 통용 분류에서 빠지거나 N1로 밀린
+52자를 구 JLPT 出題基準 급수대로 되돌렸으므로, 흔한 JLPT 자료와 급수가 다른
+글자가 있습니다. 오류가 아니라 의도된 차이입니다.
+
+--------------------------------------------------------------------------------
+KANJIDIC2 — 한자의 음독·훈독
+
+  Copyright (c) The Electronic Dictionary Research and Development Group (EDRDG)
+  Licensed under CC BY-SA 4.0
+  https://www.edrdg.org/wiki/index.php/KANJIDIC_Project
+  https://www.edrdg.org/edrdg/licence.html
+  https://creativecommons.org/licenses/by-sa/4.0/
+
+--------------------------------------------------------------------------------
+Tatoeba Project (田中コーパス 포함) — 일본어 예문
+
+  Copyright (c) Tatoeba Project contributors
+  Licensed under CC BY 2.0 FR
+  https://tatoeba.org/
+  https://creativecommons.org/licenses/by/2.0/fr/
+
+  한국어 번역은 이 저장소에서 따로 붙인 것입니다.
+
+--------------------------------------------------------------------------------
+open-anki-jlpt-decks — JLPT 단어 등급 분류의 바탕
+
+  Copyright (c) 2020 Jamie Sinclair
+  Licensed under the MIT License
+  https://github.com/jamsinclair/open-anki-jlpt-decks
+
+--------------------------------------------------------------------------------
+libhangul (data/hanja/hanja.txt) — 한자의 한글 훈음
+
+  Copyright (c) 2005, 2006 Choe Hwanjin
+  All rights reserved.
+  https://github.com/libhangul/libhangul
+
+  Redistribution and use in source and binary forms, with or without
+  modification, are permitted provided that the following conditions are met:
+
+  1. Redistributions of source code must retain the above copyright notice,
+     this list of conditions and the following disclaimer.
+  2. Redistributions in binary form must reproduce the above copyright notice,
+     this list of conditions and the following disclaimer in the documentation
+     and/or other materials provided with the distribution.
+  3. Neither the name of the author nor the names of its contributors
+     may be used to endorse or promote products derived from this software
+     without specific prior written permission.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  POSSIBILITY OF SUCH DAMAGE.
+
+--------------------------------------------------------------------------------
+빌드에 쓰는 라이브러리 (AndroidX, Jetpack Compose)는 Apache License 2.0,
+JUnit은 EPL 1.0, org.json은 Public Domain입니다. APK에는 이들만 들어갑니다.

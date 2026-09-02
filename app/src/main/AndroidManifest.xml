@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 기기에 설치된 음성 합성 엔진을 찾기 위해 필요 (Android 11+) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+    </queries>
+
+    <application
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="false"
+        android:theme="@style/Theme.NihongoMasu">
+
+        <!--
+            configChanges가 회전을 막으므로 화면 상태를 rememberSaveable로 저장하지 않는다.
+            액티비티가 다시 만들어지는 것은 시스템이 백그라운드 프로세스를 회수했다 되살릴
+            때뿐이고, 학습 기록은 채점마다 디스크에 쓰이므로 그때 잃는 것은 돌던 묶음의
+            진행(큐·현재 위치·이번 자리 집계)뿐이다.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|uiMode"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.NihongoMasu">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

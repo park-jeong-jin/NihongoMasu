@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  다크 모드용 창 테마. Compose가 첫 프레임을 그리기 전 배경이 흰색으로
+  번쩍이지 않도록 어두운 부모를 쓴다. 색은 Theme.kt의 DarkMasu.paper와 같다.
+-->
+<resources>
+    <style name="Theme.NihongoMasu" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowBackground">#10141F</item>
+    </style>
+</resources>

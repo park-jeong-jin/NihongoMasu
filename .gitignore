@@ -1,0 +1,20 @@
+# 빌드 산출물
+build/
+.gradle/
+.kotlin/
+*.apk
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+captures/
+
+# 기기마다 다른 값 (SDK 경로) — 올리면 남의 기기에서 동기화가 깨진다
+local.properties
+
+# 서명 열쇠 — 올리면 되돌릴 수 없다
+*.keystore
+*.jks
+
+# macOS
+.DS_Store

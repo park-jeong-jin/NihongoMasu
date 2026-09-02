@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 원고지 칸 -->
+    <path
+        android:strokeColor="#AFBDAE"
+        android:strokeWidth="1.6"
+        android:fillColor="#00000000"
+        android:pathData="M32,32 L76,32 L76,76 L32,76 Z" />
+    <!-- 십자 안내선 -->
+    <path
+        android:strokeColor="#D2DAD1"
+        android:strokeWidth="1"
+        android:fillColor="#00000000"
+        android:pathData="M54,34 L54,74" />
+    <path
+        android:strokeColor="#D2DAD1"
+        android:strokeWidth="1"
+        android:fillColor="#00000000"
+        android:pathData="M34,54 L74,54" />
+
+    <!-- 붉은 첨삭 동그라미 -->
+    <path
+        android:strokeColor="#CE3A2C"
+        android:strokeWidth="3.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M54,36.5 C63.7,36.5 71.5,44.3 71.5,54 C71.5,63.7 63.7,71.5 54,71.5 C44.3,71.5 36.5,63.7 36.5,54 C36.5,44.3 44.3,36.5 54,36.5 Z" />
+
+    <!-- 획: 'あ'를 단순화한 가로획 + 세로획 + 곡선 -->
+    <path
+        android:strokeColor="#16181C"
+        android:strokeWidth="2.9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M45,46.5 L63,46.5" />
+    <path
+        android:strokeColor="#16181C"
+        android:strokeWidth="2.9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M57,41 C57,52 56.5,60 54,65" />
+    <path
+        android:strokeColor="#16181C"
+        android:strokeWidth="2.9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M61,51 C52,51 46,56 46,60.5 C46,64 49,65.5 52,63.5 C56,60.5 58.5,55 61,62" />
+</vector>
