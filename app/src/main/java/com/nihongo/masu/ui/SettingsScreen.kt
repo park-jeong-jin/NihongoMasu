@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nihongo.masu.data.KanjiData
 import com.nihongo.masu.data.Script
 import com.nihongo.masu.data.Settings
 import com.nihongo.masu.data.Store
@@ -64,14 +65,30 @@ fun SettingsScreen(store: Store) {
             )
         }
 
-        SectionLabel("가나")
+        SectionLabel("복습 범위")
         MasuCard {
+            Text(
+                "오답 노트와 홈의 익힘 비율에 넣을 카드입니다. 끈 종류는 복습에서만 " +
+                    "빠지고 메뉴는 그대로 있습니다 — 가나 맞추기와 스피드, 찾기는 " +
+                    "언제든 열립니다. 기록도 남으므로 다시 켜면 돌아옵니다.",
+                fontSize = 12.sp,
+                color = m.sumi3
+            )
+            Spacer(Modifier.height(12.dp))
             ToggleRow(
-                "가나 연습",
-                "히라가나·가타카나를 이미 안다면 끄세요. 메뉴와 복습, 홈의 익힘 비율에서 " +
-                    "가나 208장이 통째로 빠집니다. 기록은 남으므로 다시 켜면 돌아옵니다.",
+                "가나",
+                "히라가나·가타카나를 이미 안다면 끄세요. 208장이 익힘 비율의 분모에서 " +
+                    "빠져 100%에 닿을 수 있게 됩니다.",
                 s.kana
             ) { s.kana = it }
+            Spacer(Modifier.height(16.dp))
+            ToggleRow(
+                "한자",
+                "음독·훈독은 단어를 외우면 따라오므로 기본은 꺼져 있습니다. 켜면 " +
+                    "한자 ${KanjiData.all.size}자가 복습에 들어옵니다. 끈 상태에서도 " +
+                    "한자 맞추기는 그대로 열립니다.",
+                s.kanji
+            ) { s.kanji = it }
         }
 
         SectionLabel("묻는 방향")

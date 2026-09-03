@@ -43,6 +43,9 @@ private enum class SpeedKind(val label: String, val script: Script?) {
     val key: String get() = name.lowercase()
 }
 
+/** 세 판을 통틀어 가장 높은 점수. 홈 타일이 판 목록을 열지 않고 볼 수 있게. */
+fun speedTop(store: Store): Int = SpeedKind.entries.maxOf { store.speedBest(it.key) }
+
 /** 스피드 단어 판의 대상 — 한 번이라도 맞힌 단어. */
 private fun speedWords(store: Store): List<Word> =
     VocabData.all.filter { (store.get(it.id)?.ok ?: 0) >= 1 }
@@ -77,8 +80,8 @@ fun SpeedFlow(
 }
 
 /**
- * 어느 판을 돌지 고른다. 가나를 끈 사람에게는 서체 두 줄이 빠진다 —
- * 안 하기로 한 글자를 재는 자리에만 남겨 둘 이유가 없다.
+ * 어느 판을 돌지 고른다. 설정에서 가나를 껐어도 서체 두 줄은 그대로 있다 —
+ * 스피드는 복습 기록을 세지 않으니 복습에서 뺀 것과 상관이 없다.
  */
 @Composable
 private fun SpeedMenu(store: Store, onPick: (SpeedKind) -> Unit) {
@@ -97,13 +100,11 @@ private fun SpeedMenu(store: Store, onPick: (SpeedKind) -> Unit) {
             color = m.sumi3,
             modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
         )
-        SpeedKind.entries
-            .filter { store.settings.kana || it.script == null }
-            .forEach { kind ->
-                val note = if (kind.script != null) "${KanaData.all.size}자에서 뽑습니다"
-                else "맞힌 적 있는 단어 ${speedWords(store).size}개에서 뽑습니다"
-                SpeedRow(kind.label, note, store.speedBest(kind.key)) { onPick(kind) }
-            }
+        SpeedKind.entries.forEach { kind ->
+            val note = if (kind.script != null) "${KanaData.all.size}자에서 뽑습니다"
+            else "맞힌 적 있는 단어 ${speedWords(store).size}개에서 뽑습니다"
+            SpeedRow(kind.label, note, store.speedBest(kind.key)) { onPick(kind) }
+        }
     }
 }
 

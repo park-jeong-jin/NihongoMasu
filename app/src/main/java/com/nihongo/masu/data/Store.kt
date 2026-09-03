@@ -10,12 +10,13 @@ import java.time.LocalDate
 import kotlin.reflect.KProperty
 
 /**
- * 카드의 기록 열쇠. 가나는 [scripts]에 든 서체만 센다 — 가나를 끈 사람의
- * 익힘 비율 분모에 안 하기로 한 208장이 남으면 100%에 닿지 않는다.
+ * 카드의 기록 열쇠. 가나는 [scripts]에 든 서체만 세고, [kanji]가 false면 한자가
+ * 통째로 빠진다 — 가나·한자를 끈 사람의 익힘 비율 분모에 안 하기로 한 장수가
+ * 남으면 100%에 닿지 않는다.
  */
-fun cardIds(scripts: List<Script>): List<String> =
+fun cardIds(scripts: List<Script>, kanji: Boolean = true): List<String> =
     KanaData.all.flatMap { k -> scripts.map { k.id(it) } } +
-        KanjiData.all.map { it.id } +
+        (if (kanji) KanjiData.all.map { it.id } else emptyList()) +
         VocabData.all.map { it.id }
 
 /**
@@ -83,13 +84,29 @@ class Settings(private val prefs: SharedPreferences) {
     var silent: Boolean by Pref(prefs.getBoolean(KEY_SILENT, false))
 
     /**
-     * 가나를 연습할지. 끄면 메뉴·복습·익힘 분모에서 가나가 통째로 빠진다.
+     * 가나를 복습에 낼지. 끄면 오답 노트와 익힘 분모에서 가나가 통째로 빠진다.
      *
      * 히라가나·가타카나를 이미 아는 사람에게는 208장이 영영 안 채워지는 분모로
      * 남아 익힘 비율이 100%에 닿지 않는다. 그 사람이 끌 스위치가 이것 하나다.
-     * 히라만·가타만 하고 싶은 것은 설정이 아니라 가나 맞추기의 범위 고르기가 맡는다.
+     *
+     * 메뉴는 건드리지 않는다 — 가나 맞추기와 스피드의 서체 판은 끈 뒤에도
+     * 그대로 열린다. 안 외우기로 한 것과 한 번 훑어보는 것은 다른 일이다.
+     * 히라만·가타만 하고 싶은 것은 가나 맞추기의 범위 고르기가 맡는다.
      */
     var kana: Boolean by Pref(prefs.getBoolean(KEY_KANA, true))
+
+    /**
+     * 한자를 한 자씩 복습할지. 기본은 꺼져 있다.
+     *
+     * 한자 한 자의 음독·훈독은 단어를 외우면 따라오는 것이라, 이걸 켜면 단어와
+     * 한자를 두 번 외우는 셈이 되는 카드가 많다. 그래서 기본을 끄고, 부수까지
+     * 한 자씩 파고 싶은 사람만 켜게 뒀다.
+     *
+     * [kana]와 달리 단어 맞추기의 한자 범위도 여기서 같이 여닫는다 — 기본이
+     * 꺼짐이라 안내 없이 목록에만 남겨 두면 켤 자리를 찾을 수가 없다.
+     * 단어에 든 한자는 그대로 나온다. 기록은 남으므로 다시 켜면 돌아온다.
+     */
+    var kanji: Boolean by Pref(prefs.getBoolean(KEY_KANJI, false))
 
     /** 밝게 볼지 어둡게 볼지. 기기 설정을 따를 수도 있다. */
     var theme: ThemeMode by Pref(
@@ -105,6 +122,7 @@ class Settings(private val prefs: SharedPreferences) {
             .putInt(KEY_FRESH, fresh)
             .putString(KEY_THEME, theme.name)
             .putBoolean(KEY_KANA, kana)
+            .putBoolean(KEY_KANJI, kanji)
             // null은 키를 지운다 — 「그때그때 고르기」가 그 상태다.
             .putString(KEY_ASK, ask?.name)
             .apply()
@@ -125,6 +143,7 @@ class Settings(private val prefs: SharedPreferences) {
         private const val KEY_THEME = "set_theme"
         private const val KEY_ASK = "set_ask"
         private const val KEY_KANA = "set_kana"
+        private const val KEY_KANJI = "set_kanji"
     }
 }
 
@@ -147,18 +166,21 @@ class Store(context: Context) {
     private val records: SnapshotStateMap<String, Rec> = mutableStateMapOf()
 
     /**
-     * 연습에 낼 가나. 설정에서 가나를 끄면 비고, 그러면 가나가 메뉴에서도
-     * 복습에서도 익힘 분모에서도 한꺼번에 사라진다.
+     * 복습에 낼 가나. 설정에서 가나를 끄면 빈다. 메뉴는 이걸 보지 않는다 —
+     * 가나 맞추기는 끈 뒤에도 [Script.entries] 전부를 그대로 낸다.
      */
     val kanaScripts: List<Script>
         get() = if (settings.kana) Script.entries else emptyList()
 
+    /** 복습에 낼 한자. 설정에서 한자를 끄면 빈다 — [kanaScripts]와 같은 자리다. */
+    val kanjiCards: List<Kanji> get() = if (settings.kanji) KanjiData.all else emptyList()
+
     /**
-     * 설정을 따르는 집계 범위. 가나를 끄면 빠진다 — 안 하기로 한 글자가
+     * 설정을 따르는 집계 범위. 가나나 한자를 끄면 빠진다 — 안 외우기로 한 글자가
      * 익힘 분모에 남으면 비율이 100%에 닿지 않는다. 기록 자체는 남으므로
      * 다시 켜면 그대로 돌아온다.
      */
-    val activeCardIds: List<String> get() = cardIds(kanaScripts)
+    val activeCardIds: List<String> get() = cardIds(kanaScripts, settings.kanji)
 
     /** 최근 학습한 날들(일수). 홈의 연속기록 점이 이걸로 그려진다. */
     private val _days = mutableStateOf<List<Long>>(emptyList())

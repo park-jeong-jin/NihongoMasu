@@ -59,6 +59,27 @@ class DataTest {
         assertTrue("예문 읽기에 한자가 남음: ${bad.map { it.w to it.exRead }}", bad.isEmpty())
     }
 
+    /** 표기 그대로 읽히지 않는 말 — 연탁·음편이라 예문 읽기가 표제어 읽기와 다르다. */
+    private val soundChange = setOf("分", "係", "気味", "袋", "版", "沿い", "住まい", "振り")
+
+    @Test fun `예문 읽기에 표제어 읽기가 그대로 들어 있다`() {
+        // 예문 후리가나를 한자마다 기계로 붙이면 「二十日」이 「にとおか」가 된다.
+        // 카드 앞면은 はつか라고 가르치고 예문은 다르게 읽히니 학습자가 어느 쪽을 믿을 수 없다.
+        val bad = VocabData.all.filter { w ->
+            w.w in w.ex && w.w !in soundChange &&
+                listOfNotNull(w.read, w.read.removeSuffix("する"), w.read.dropLast(1))
+                    .none { it.isNotEmpty() && it in w.exRead }
+        }
+        assertTrue("예문 읽기가 표제어 읽기와 다름: ${bad.map { Triple(it.w, it.read, it.exRead) }}", bad.isEmpty())
+    }
+
+    @Test fun `예문의 가타카나는 읽기에도 가타카나로 남는다`() {
+        // 「フランス語」를 「ふらんすご」로 적으면 외래어를 히라가나로 쓰는 줄 알게 된다.
+        val kata = { s: String -> s.filter { it in '\u30A1'..'\u30F4' }.toSet() - 'ヶ' }
+        val bad = VocabData.all.filterNot { kata(it.ex).all { c -> c in kata(it.exRead) } }
+        assertTrue("예문 읽기에서 가타카나가 뭉개짐: ${bad.map { it.ex to it.exRead }}", bad.isEmpty())
+    }
+
     @Test fun `모든 단어에 예문이 채워져 있다`() {
         VocabData.all.forEach {
             assertTrue("예문 없음: ${it.w}", it.ex.isNotBlank())
@@ -104,6 +125,14 @@ class DataTest {
         val off = cardIds(emptyList())
         assertEquals(208, all.size - off.size)
         assertEquals(KanjiData.all.size + VocabData.all.size, off.size)
+    }
+
+    @Test fun `한자를 끄면 익힘 분모에서 한자만 빠진다`() {
+        // 설정에서 한자를 끈 상태(Store.kanjiCards가 빈 목록)에서 세는 범위다.
+        val off = cardIds(Script.entries, kanji = false)
+        val kanjiKeys = KanjiData.all.map { it.id }.toSet()
+        assertTrue(off.none { it in kanjiKeys })
+        assertEquals(cardIds(Script.entries).size - KanjiData.all.size, off.size)
     }
 
     @Test fun `서체를 끄면 그 서체의 열쇠만 빠진다`() {

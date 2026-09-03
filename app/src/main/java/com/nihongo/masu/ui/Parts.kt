@@ -51,6 +51,8 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -825,28 +827,33 @@ fun StageBar(counts: Map<Stage, Int>, total: Int, modifier: Modifier = Modifier)
         Spacer(Modifier.height(5.dp))
         // 막대와 같은 비율·같은 간격으로 나눠야 숫자가 제 칸 아래에 선다.
         val cells = fills.map { it.first } + listOfNotNull(rest.takeIf { it > 0 })
-        BoxWithConstraints {
-            val width = maxWidth
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                cells.forEachIndexed { i, n ->
-                    val last = i == cells.lastIndex
-                    val fits = total > 0 && width * (n.toFloat() / total) >= LABEL_MIN
-                    Text(
-                        when {
-                            last -> "$total"
-                            fits -> "$n"
-                            else -> ""
-                        },
-                        Modifier.weight(n.toFloat()),
-                        fontSize = 10.sp,
-                        color = m.sumi3,
-                        maxLines = 1,
-                        textAlign = if (last) TextAlign.End else TextAlign.Center
-                    )
-                }
+        // 칸 폭은 그려 본 뒤에야 안다. BoxWithConstraints로 물으면 이 막대가 든 칸에
+        // IntrinsicSize.Min을 걸 수 없어(SubcomposeLayout은 intrinsic 측정을 못 한다)
+        // 홈 격자가 죽는다. 그래서 폭만 재 두고 다음 프레임에 쓴다 — 첫 프레임은
+        // 폭이 0이라 총 장수만 나오고, 한 프레임 뒤에 나머지 숫자가 붙는다.
+        var width by remember { mutableStateOf(0.dp) }
+        val density = LocalDensity.current
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .onSizeChanged { width = with(density) { it.width.toDp() } },
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            cells.forEachIndexed { i, n ->
+                val last = i == cells.lastIndex
+                val fits = total > 0 && width * (n.toFloat() / total) >= LABEL_MIN
+                Text(
+                    when {
+                        last -> "$total"
+                        fits -> "$n"
+                        else -> ""
+                    },
+                    Modifier.weight(n.toFloat()),
+                    fontSize = 10.sp,
+                    color = m.sumi3,
+                    maxLines = 1,
+                    textAlign = if (last) TextAlign.End else TextAlign.Center
+                )
             }
         }
     }

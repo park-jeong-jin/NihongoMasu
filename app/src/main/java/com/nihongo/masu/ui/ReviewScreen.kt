@@ -73,7 +73,7 @@ private fun rowsOf(store: Store): List<Row4> {
         }
     }
     // 한자·단어는 방향이 어느 쪽이든 기록이 한 벌이라 한 줄씩이다.
-    KanjiData.all.forEach { k ->
+    store.kanjiCards.forEach { k ->
         store.get(k.id)?.let { r ->
             out.add(
                 Row4(

@@ -46,7 +46,7 @@ private const val HINT_SHOW = "뜻과 읽기를 떠올려 보세요"
 private const val HINT_RECALL = "일본어로 어떻게 쓰는지 떠올려 보세요"
 
 /**
- * 기능 2 — 단어 맞추기.
+ * 기능 2·3 — 단어 맞추기와 한자 맞추기.
  *
  * 글자만 보여주고, 머릿속으로 답한 뒤 '정답 확인'을 누른다. 답을 본
  * 다음 맞았는지 틀렸는지 직접 고른다. 사지선다와 달리 보기에서 답을
@@ -56,26 +56,30 @@ private const val HINT_RECALL = "일본어로 어떻게 쓰는지 떠올려 보�
  * 고르는 자리는 범위를 누르는 순간이다. 방향을 바꾸면 어차피 묶음이 새로 깔리므로
  * 판 도중에 바꾸는 값이 아니라 판을 시작하는 값이다. 설정에서 고정해 두면 안 묻는다.
  *
- * 범위 목록 → 카드 두 단계다. 범위는 JLPT 등급 × (한자 전체 | 단어 분류)다.
+ * 범위 목록 → 카드 두 단계다. 범위는 JLPT 등급 × 분류다.
+ *
+ * 두 기능이 같은 흐름을 [kind]만 갈아 끼워 쓴다. 묻는 화면이 글자 그대로 같아서
+ * — 보여주고, 떠올리고, 직접 채점한다 — 화면을 둘로 베낄 이유가 없다. 홈에서
+ * 갈라 둔 것은 한자를 한 자씩 외우는 것이 단어를 외우는 것과 다른 결심이라
+ * 단어 목록 안에 줄 하나로 끼워 두면 눈에 안 띄기 때문이다.
  */
 @Composable
 fun WordQuizFlow(
     store: Store,
     speaker: Speaker,
+    kind: CardKind,
     practicing: Boolean,
     onOpen: () -> Unit,
     onClose: () -> Unit
 ) {
     var level by remember { mutableStateOf(Jlpt.N5) }
-    var kind by remember { mutableStateOf(CardKind.WORD) }
     var tag by remember { mutableStateOf(VocabData.ALL_TAGS) }
     var dir by remember { mutableStateOf(Ask.MIX) }
 
     // 설정이 「그때그때 고르기」일 때 팝업을 띄우려고 잡아 두는 범위.
-    var pending by remember { mutableStateOf<Pair<CardKind, String>?>(null) }
+    var pending by remember { mutableStateOf<String?>(null) }
 
-    fun start(k: CardKind, t: String, d: Ask) {
-        kind = k
+    fun start(t: String, d: Ask) {
         tag = t
         dir = d
         pending = null
@@ -85,30 +89,31 @@ fun WordQuizFlow(
     if (practicing) {
         WordQuizScreen(store, speaker, level, kind, tag, dir, onClose)
     } else {
-        WordScopeMenu(store, level, { level = it }) { k, t ->
+        WordScopeMenu(store, kind, level, { level = it }) { t ->
             val fixed = store.settings.ask
-            if (fixed == null) pending = k to t else start(k, t, fixed)
+            if (fixed == null) pending = t else start(t, fixed)
         }
     }
 
-    pending?.let { (k, t) ->
+    pending?.let { t ->
         AskDialog(
-            scope = if (k == CardKind.KANJI) "${level.label} 한자" else "${level.label} $t",
+            scope = if (kind == CardKind.KANJI) "${level.label} 한자" else "${level.label} $t",
             onDismiss = { pending = null }
-        ) { start(k, t, it) }
+        ) { start(t, it) }
     }
 }
 
 /**
- * JLPT 등급을 먼저 고르고, 그 등급의 한자와 단어 분류를 보여준다.
+ * JLPT 등급을 먼저 고르고, 그 등급의 [kind] 범위를 보여준다.
  * 등급까지 화면 단계로 쪼개면 홈에서 세 번 눌러야 카드에 닿아 여기서는 필터로 둔다.
  */
 @Composable
 private fun WordScopeMenu(
     store: Store,
+    kind: CardKind,
     level: Jlpt,
     onLevel: (Jlpt) -> Unit,
-    onPick: (CardKind, String) -> Unit
+    onPick: (String) -> Unit
 ) {
     val m = LocalMasu.current
     val fixed = store.settings.ask
@@ -133,21 +138,32 @@ private fun WordScopeMenu(
             color = m.sumi3
         )
 
-        SectionLabel("한자")
-        ScopeRow(store, "${level.label} 한자", KanjiData.of(level).map { it.id }) {
-            onPick(CardKind.KANJI, VocabData.ALL_TAGS)
-        }
+        if (kind == CardKind.KANJI) {
+            // 복습 범위 밖이면 여기서 채점한 것이 오답 노트에도 익힘 비율에도 안 뜬다.
+            // 켤 자리를 모르면 기록이 사라진 것처럼 보인다.
+            if (!store.settings.kanji) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "지금 한자는 복습 범위 밖입니다 — 여기서 채점해도 오답 노트와 " +
+                        "익힘 비율에는 안 들어갑니다. 설정에서 켜면 들어옵니다.",
+                    fontSize = 12.sp,
+                    color = m.sumi3
+                )
+            }
+            SectionLabel("한자")
+            ScopeRow(store, "${level.label} 한자", KanjiData.of(level).map { it.id }) {
+                onPick(VocabData.ALL_TAGS)
+            }
+        } else {
+            SectionLabel("단어")
+            ScopeRow(
+                store,
+                VocabData.ALL_TAGS,
+                VocabData.of(level, VocabData.ALL_TAGS).map { it.id }
+            ) { onPick(VocabData.ALL_TAGS) }
 
-        SectionLabel("단어")
-        ScopeRow(
-            store,
-            VocabData.ALL_TAGS,
-            VocabData.of(level, VocabData.ALL_TAGS).map { it.id }
-        ) { onPick(CardKind.WORD, VocabData.ALL_TAGS) }
-
-        VocabData.tagsOf(level).forEach { t ->
-            ScopeRow(store, t, VocabData.of(level, t).map { it.id }) {
-                onPick(CardKind.WORD, t)
+            VocabData.tagsOf(level).forEach { t ->
+                ScopeRow(store, t, VocabData.of(level, t).map { it.id }) { onPick(t) }
             }
         }
     }

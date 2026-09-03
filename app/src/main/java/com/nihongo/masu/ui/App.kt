@@ -49,19 +49,11 @@ import kotlinx.coroutines.launch
 
 enum class Feature(val label: String) {
     KANA("가나 맞추기"),
+    KANJI("한자 맞추기"),
     SELF("단어 맞추기"),
     SPEED("스피드"),
     REVIEW("오답 노트")
 }
-
-/**
- * 드로어와 홈에 낼 기능. 설정에서 가나를 끄면 가나 맞추기가 빠진다 —
- * 켜 놓고 목록에만 남기면 눌러 들어간 화면이 비어 있다.
- *
- * [Feature]가 ui에 있어서 Store가 아니라 여기서 고른다.
- */
-fun featuresOf(store: Store): List<Feature> =
-    Feature.entries.filter { it != Feature.KANA || store.settings.kana }
 
 /**
  * 화면 한 장.
@@ -147,7 +139,7 @@ fun App(store: Store, speaker: Speaker) {
                 }
 
                 DrawerRow("오늘", here == Screen.Home) { openFromDrawer(Screen.Home) }
-                featuresOf(store).forEach { f ->
+                Feature.entries.forEach { f ->
                     DrawerRow(f.label, here.feature == f) { openFromDrawer(Screen.Menu(f)) }
                 }
 
@@ -254,7 +246,10 @@ fun App(store: Store, speaker: Speaker) {
                         val open: () -> Unit = { stack.add(Screen.Practice(target)) }
                         when (target) {
                             Feature.KANA -> KanaFlow(store, speaker, practicing, open) { pop() }
-                            Feature.SELF -> WordQuizFlow(store, speaker, practicing, open) { pop() }
+                            Feature.SELF ->
+                                WordQuizFlow(store, speaker, CardKind.WORD, practicing, open) { pop() }
+                            Feature.KANJI ->
+                                WordQuizFlow(store, speaker, CardKind.KANJI, practicing, open) { pop() }
                             Feature.SPEED -> SpeedFlow(store, practicing, open) { pop() }
                             Feature.REVIEW -> ReviewFlow(store, speaker, practicing, open) { pop() }
                         }
@@ -324,9 +319,11 @@ private fun DrawerRow(label: String, selected: Boolean, onClick: () -> Unit) {
 fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     val m = LocalMasu.current
 
-    // 켜 둔 서체만 센다. 목록이 400개 남짓이라 매번 조립해도 부담이 없다.
-    val kanaIds = KanaData.all.flatMap { k -> store.kanaScripts.map { k.id(it) } }
-    val selfIds = remember { KanjiData.all.map { it.id } + VocabData.all.map { it.id } }
+    // 가나를 복습에서 뺐어도 타일은 그대로 있다. 그래서 여기서는 설정을 보지 않고
+    // 서체 두 벌을 다 센다 — 타일에 달린 막대는 이 카드들의 기록 그대로다.
+    val kanaIds = remember { KanaData.all.flatMap { k -> Script.entries.map { k.id(it) } } }
+    val wordIds = remember { VocabData.all.map { it.id } }
+    val kanjiIds = remember { KanjiData.all.map { it.id } }
 
     val allCardIds = store.activeCardIds
     val due = store.countDue(allCardIds)
@@ -404,11 +401,11 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
                 Spacer(Modifier.height(14.dp))
                 PrimaryButton(
                     if (due > 0) "오늘 복습 시작 · ${due}장"
-                    else "${featuresOf(store).first { it != Feature.REVIEW }.label} 시작",
+                    else "${Feature.KANA.label} 시작",
                     {
                         go(
                             if (due > 0) Screen.Practice(Feature.REVIEW)
-                            else Screen.Menu(featuresOf(store).first { it != Feature.REVIEW })
+                            else Screen.Menu(Feature.KANA)
                         )
                     },
                     Modifier.fillMaxWidth()
@@ -418,16 +415,26 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
 
         SectionLabel("연습")
 
-        val tiles = listOfNotNull(
-            if (kanaIds.isEmpty()) null else Tile(
+        val tiles = listOf(
+            Tile(
                 Feature.KANA, "로마자와 듣고 쓰기를 섞어서.",
                 "가나 익힘 ${kanaStages[Stage.MASTERED] ?: 0}",
                 kanaStages, kanaIds.size, m.ai
             ),
             Tile(
+                Feature.KANJI, "한 자씩 뜻과 음훈을.",
+                "한자 ${KanjiData.all.size}",
+                store.countStages(kanjiIds), kanjiIds.size, m.ok
+            ),
+            Tile(
                 Feature.SELF, "일→한·한→일로 묻습니다.",
-                "단어 ${VocabData.all.size} · 한자 ${KanjiData.all.size}",
-                store.countStages(selfIds), selfIds.size, m.gold
+                "단어 ${VocabData.all.size}",
+                store.countStages(wordIds), wordIds.size, m.gold
+            ),
+            Tile(
+                Feature.SPEED, "1분에 몇 장을 넘기는지.",
+                speedTop(store).let { if (it > 0) "최고 ${it}장" else "아직 기록 없음" },
+                null, 0, m.murasaki
             ),
             Tile(
                 Feature.REVIEW, "틀린 카드만 모아 봅니다.",
