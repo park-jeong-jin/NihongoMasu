@@ -5,8 +5,6 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -24,7 +22,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nihongo.masu.data.KanjiData
-import com.nihongo.masu.data.Script
 import com.nihongo.masu.data.Settings
 import com.nihongo.masu.data.Store
 import com.nihongo.masu.data.ThemeMode
@@ -42,13 +39,7 @@ fun SettingsScreen(store: Store) {
     val m = LocalMasu.current
     val s = store.settings
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         SectionLabel("화면")
         MasuCard {
             SegmentedRow(

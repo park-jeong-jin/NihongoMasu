@@ -49,7 +49,10 @@ object Backup {
     }.getOrNull()
 }
 
-/** 기록 한 줄 → JSON. 열쇠가 한 글자인 것은 24KB짜리 파일을 매 채점마다 다시 쓰기 때문이다. */
+/**
+ * 기록 한 줄 → JSON. 열쇠를 한 글자로 두는 것은 SharedPreferences가 어느 한 칸을
+ * 고쳐도 파일을 통째로 다시 쓰기 때문이다 — 파일이 작을수록 그 일이 싸다.
+ */
 internal fun Rec.toJson(): JSONObject = JSONObject()
     .put("b", box).put("d", due).put("o", ok)
     .put("n", ng).put("l", last).put("t", traced).put("s", best)

@@ -17,10 +17,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -60,7 +62,6 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nihongo.masu.data.Ask
@@ -186,7 +187,7 @@ fun Modifier.shake(trigger: Any?): Modifier {
  * 더 그럴듯한 낙하가 필요해지면 그때 속도·중력 항을 넣는다.
  */
 @Composable
-fun Confetti(modifier: Modifier = Modifier) {
+private fun Confetti(modifier: Modifier = Modifier) {
     val m = LocalMasu.current
     val palette = listOf(m.ai, m.shu, m.ok, m.gold)
     val bits = remember {
@@ -229,8 +230,11 @@ fun Confetti(modifier: Modifier = Modifier) {
  * 바로 넘기면 그 색이 다음 문제 위에 얹혀 엉뚱한 문제를 채점한 것처럼 보인다.
  * 그래서 색을 [holdMs] 동안 붙잡아 둔 뒤에 넘길 일을 실행한다.
  */
+/** 채점 색을 붙잡아 두는 시간. 한 자리에서만 쓰므로 값으로 둔다. */
+private const val VERDICT_HOLD_MS = 420L
+
 @Stable
-class Verdict(private val holdMs: Long) {
+class Verdict {
     private val _correct = mutableStateOf<Boolean?>(null)
     private val _tick = mutableIntStateOf(0)
     private var pending: (() -> Unit)? = null
@@ -254,7 +258,7 @@ class Verdict(private val holdMs: Long) {
     }
 
     internal suspend fun settle() {
-        delay(holdMs)
+        delay(VERDICT_HOLD_MS)
         val go = pending
         pending = null
         _correct.value = null
@@ -263,8 +267,8 @@ class Verdict(private val holdMs: Long) {
 }
 
 @Composable
-fun rememberVerdict(holdMs: Long = 420L): Verdict {
-    val v = remember { Verdict(holdMs) }
+private fun rememberVerdict(): Verdict {
+    val v = remember { Verdict() }
     LaunchedEffect(v.tick) {
         if (v.tick > 0) v.settle()
     }
@@ -459,6 +463,24 @@ private data class Bit(
 
 // ─── 부품 ──────────────────────────────────────────────────────────────────
 
+/**
+ * 화면 한 장의 기둥. 세로 스크롤과 좌우·아래 여백을 한 자리에 둔다.
+ *
+ * 화면 열한 곳이 같은 네 줄을 적어 두고 있었다. 여백이 한 군데서만 어긋나도
+ * 화면을 넘길 때 글자가 좌우로 밀려 보이므로, 값이 아니라 자리를 하나로 둔다.
+ */
+@Composable
+fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp)
+            .padding(bottom = 24.dp),
+        content = content
+    )
+}
+
 /** 화면 위쪽의 얇은 제목줄. */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
@@ -515,8 +537,7 @@ fun PrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    color: Color? = null
+    enabled: Boolean = true
 ) {
     val m = LocalMasu.current
     val source = remember { MutableInteractionSource() }
@@ -528,7 +549,7 @@ fun PrimaryButton(
         shape = RoundedCornerShape(14.dp),
         interactionSource = source,
         colors = ButtonDefaults.buttonColors(
-            containerColor = color ?: m.ai,
+            containerColor = m.ai,
             contentColor = if (m.dark) Color(0xFF0F1114) else Color.White
         )
     ) {
@@ -692,50 +713,35 @@ fun ProgressBar(
  * 그때마다 아래 내용이 밀린다.
  */
 @Composable
-fun QuizHeader(
-    label: String,
-    fraction: Float,
-    modifier: Modifier = Modifier,
-    note: String? = null,
-    rewind: Rewind? = null,
-    onRewind: () -> Unit = {}
-) {
+fun QuizHeader(session: QuizSession<*>, label: String) {
     val m = LocalMasu.current
-    Column(modifier.fillMaxWidth()) {
+    val canRewind = session.rewind.can
+    Column(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontSize = 12.sp, color = m.sumi3, modifier = Modifier.weight(1f))
-            if (note != null) Text(note, fontSize = 12.sp, color = m.sumi3)
-            if (rewind != null) {
-                val on = rewind.can
-                Box(
-                    Modifier
-                        .padding(start = 4.dp)
-                        .size(40.dp)
-                        .clip(CircleShape)
-                        .clickable(enabled = on, onClick = onRewind)
-                        .semantics { contentDescription = "이전 카드로 되돌리기" },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("\u21A9", fontSize = 17.sp, color = if (on) m.ai else m.rule)
-                }
+            Text(
+                "$label · ${session.index + 1} / ${session.queue.size}",
+                fontSize = 12.sp,
+                color = m.sumi3,
+                modifier = Modifier.weight(1f)
+            )
+            if (session.total > 0) {
+                Text("맞음 ${session.ok} / ${session.total}", fontSize = 12.sp, color = m.sumi3)
+            }
+            Box(
+                Modifier
+                    .padding(start = 4.dp)
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .clickable(enabled = canRewind, onClick = { session.undoLast() })
+                    .semantics { contentDescription = "이전 카드로 되돌리기" },
+                contentAlignment = Alignment.Center
+            ) {
+                Text("\u21A9", fontSize = 17.sp, color = if (canRewind) m.ai else m.rule)
             }
         }
         Spacer(Modifier.height(6.dp))
-        ProgressBar(fraction)
+        ProgressBar(session.index.toFloat() / session.queue.size.coerceAtLeast(1))
     }
-}
-
-/** 문제 화면 넷이 같은 값을 넘기던 자리. [label]에 범위 이름만 주면 된다. */
-@Composable
-fun QuizHeader(session: QuizSession<*>, label: String, modifier: Modifier = Modifier) {
-    QuizHeader(
-        label = "$label · ${session.index + 1} / ${session.queue.size}",
-        fraction = session.index.toFloat() / session.queue.size.coerceAtLeast(1),
-        modifier = modifier,
-        note = if (session.total > 0) "맞음 ${session.ok} / ${session.total}" else null,
-        rewind = session.rewind,
-        onRewind = { session.undoLast() }
-    )
 }
 
 /**
@@ -859,13 +865,33 @@ fun StageBar(counts: Map<Stage, Int>, total: Int, modifier: Modifier = Modifier)
     }
 }
 
+/**
+ * 문제 카드 한 장. 채점 색과 오답 흔들림, 가운데 정렬을 한 벌로 낸다 —
+ * 오답 노트와 단어 맞추기가 같은 네 줄을 따로 적어 두고 있었다.
+ */
+@Composable
+fun QuizCard(verdict: Verdict, content: @Composable ColumnScope.() -> Unit) {
+    MasuCard(Modifier.shake(verdict.shakeKey), glow = verdict.glow()) {
+        Column(
+            Modifier.fillMaxWidth().padding(vertical = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            content = content
+        )
+    }
+}
+
+/** 질문면과 정답면을 가르는 짧은 선. */
+@Composable
+fun AnswerDivider() {
+    HorizontalDivider(Modifier.fillMaxWidth(0.35f), color = LocalMasu.current.ruleSoft)
+}
+
 /** 큰 일본어 글자. */
 @Composable
 fun JpText(
     text: String,
     size: Int,
-    modifier: Modifier = Modifier,
-    color: Color? = null
+    modifier: Modifier = Modifier
 ) {
     val m = LocalMasu.current
     Text(
@@ -874,7 +900,7 @@ fun JpText(
         fontFamily = JpFont,
         fontSize = size.sp,
         lineHeight = (size * 1.15).sp,
-        color = color ?: m.sumi,
+        color = m.sumi,
         textAlign = TextAlign.Center
     )
 }
@@ -921,6 +947,9 @@ fun RecLine(rec: Rec?) {
     )
 }
 
+/** 격자 칸 사이. 줄 간격과 칸 간격이 같아야 격자가 고르게 보인다. */
+private val GRID_GAP = 10.dp
+
 /**
  * [items]를 [cols]칸 격자로 접는다. 줄 높이는 그 줄에서 가장 높은 칸에 맞추고,
  * 마지막 줄이 덜 차면 남은 칸을 비워 둔다 — 안 그러면 남은 칸이 늘어난다.
@@ -931,13 +960,12 @@ fun RecLine(rec: Rec?) {
 fun <T> Grid(
     items: List<T>,
     cols: Int,
-    spacing: Dp = 10.dp,
     cell: @Composable (item: T, index: Int) -> Unit
 ) {
     items.chunked(cols).forEachIndexed { row, chunk ->
         Row(
-            Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(bottom = spacing),
-            horizontalArrangement = Arrangement.spacedBy(spacing)
+            Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(bottom = GRID_GAP),
+            horizontalArrangement = Arrangement.spacedBy(GRID_GAP)
         ) {
             chunk.forEachIndexed { col, item ->
                 Box(Modifier.weight(1f).fillMaxHeight(), contentAlignment = Alignment.Center) {
@@ -1064,7 +1092,7 @@ fun AskDialog(scope: String, onDismiss: () -> Unit, onPick: (Ask) -> Unit) {
  * 조용히 새 묶음이 깔리면 방금 본 카드가 또 나와서 아직 도는 중인지 다시
  * 시작한 건지 알 수 없다. 여기서 멈춰 세우고, 기본 행동은 목록으로 나가는 것이다.
  *
- * @param note 「맞음 3 / 5」처럼 한 바퀴의 결과. 채점이 없는 화면은 비워 둔다.
+ * @param note 「맞음 3 / 5」처럼 한 바퀴의 결과.
  */
 @Composable
 fun CycleDone(
@@ -1088,10 +1116,8 @@ fun CycleDone(
                     fontWeight = FontWeight.Bold,
                     color = m.sumi
                 )
-                if (note.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(note, fontSize = 13.sp, color = m.sumi3, textAlign = TextAlign.Center)
-                }
+                Spacer(Modifier.height(6.dp))
+                Text(note, fontSize = 13.sp, color = m.sumi3, textAlign = TextAlign.Center)
             }
         }
         Confetti(Modifier.matchParentSize())

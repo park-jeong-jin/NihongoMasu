@@ -1,16 +1,8 @@
 package com.nihongo.masu.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -117,13 +109,7 @@ private fun WordScopeMenu(
 ) {
     val m = LocalMasu.current
     val fixed = store.settings.ask
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         SegmentedRow(
             options = Jlpt.entries.toList(),
             selected = level,
@@ -227,21 +213,15 @@ private fun WordQuizScreen(
     val card = session.card
     var confirmReset by remember { mutableStateOf(false) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         if (session.done) {
             CycleDone(session, onClose) { rebuild() }
-            return@Column
+            return@ScreenColumn
         }
 
         if (card == null) {
             NothingDue(store)
-            return@Column
+            return@ScreenColumn
         }
 
         fun answer(rating: Rating) =
@@ -256,55 +236,50 @@ private fun WordQuizScreen(
         Spacer(Modifier.height(24.dp))
 
         // 앞면 — 고른 방향에 따라 일본어 표기이거나 한국어 뜻이다
-        MasuCard(Modifier.shake(verdict.shakeKey), glow = verdict.glow()) {
-            Column(
-                Modifier.fillMaxWidth().padding(vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val promptSize = when {
-                    card.prompt.length > 12 -> 22
-                    card.prompt.length > 4 -> 34
-                    card.prompt.length > 2 -> 46
-                    else -> 64
+        QuizCard(verdict) {
+            val promptSize = when {
+                card.prompt.length > 12 -> 22
+                card.prompt.length > 4 -> 34
+                card.prompt.length > 2 -> 46
+                else -> 64
+            }
+            // 한→일의 질문면은 한국어 뜻이다. JpText는 일본어 서체를 물려서
+            // 한글이 대체 글꼴로 떨어진다.
+            if (card.korean) {
+                Text(
+                    card.prompt,
+                    fontSize = promptSize.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = m.sumi,
+                    textAlign = TextAlign.Center
+                )
+            } else {
+                JpText(card.prompt, promptSize)
+            }
+
+            if (revealed) {
+                Spacer(Modifier.height(20.dp))
+                AnswerDivider()
+                Spacer(Modifier.height(18.dp))
+
+                if (card.answer.isNotBlank()) {
+                    JpText(card.answer, if (card.answer.length > 4) 34 else 48)
+                    Spacer(Modifier.height(10.dp))
                 }
-                // 한→일의 질문면은 한국어 뜻이다. JpText는 일본어 서체를 물려서
-                // 한글이 대체 글꼴로 떨어진다.
-                if (card.korean) {
+                if (card.meaning.isNotBlank()) {
                     Text(
-                        card.prompt,
-                        fontSize = promptSize.sp,
+                        card.meaning,
+                        fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
                         color = m.sumi,
                         textAlign = TextAlign.Center
                     )
-                } else {
-                    JpText(card.prompt, promptSize)
+                    Spacer(Modifier.height(12.dp))
                 }
-
-                if (revealed) {
-                    Spacer(Modifier.height(20.dp))
-                    HorizontalDivider(Modifier.fillMaxWidth(0.35f), color = m.ruleSoft)
-                    Spacer(Modifier.height(18.dp))
-
-                    if (card.answer.isNotBlank()) {
-                        JpText(card.answer, if (card.answer.length > 4) 34 else 48)
-                        Spacer(Modifier.height(10.dp))
-                    }
-                    if (card.meaning.isNotBlank()) {
-                        Text(
-                            card.meaning,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = m.sumi,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    AnswerFace(card.says, card.link, speaker)
-                } else {
-                    Spacer(Modifier.height(20.dp))
-                    Text(card.hint, fontSize = 13.sp, color = m.sumi3, textAlign = TextAlign.Center)
-                }
+                AnswerFace(card.says, card.link, speaker)
+            } else {
+                Spacer(Modifier.height(20.dp))
+                Text(card.hint, fontSize = 13.sp, color = m.sumi3, textAlign = TextAlign.Center)
             }
         }
 

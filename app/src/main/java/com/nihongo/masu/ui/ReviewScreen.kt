@@ -2,9 +2,7 @@ package com.nihongo.masu.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -142,13 +140,7 @@ private fun ReviewList(
     var confirmResetAll by remember { mutableStateOf(false) }
     var pendingReset by remember { mutableStateOf<Row4?>(null) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         SegmentedRow(
             options = Filter.entries.toList(),
             selected = filter,
@@ -315,22 +307,16 @@ private fun ReviewPractice(
     // 맞힌 카드가 목록에서 빠지면서 큐가 줄면 풀던 자리를 잃는다.
     remember { rebuild() }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         if (session.done) {
             CycleDone(session, onClose) { rebuild() }
-            return@Column
+            return@ScreenColumn
         }
 
         val row = session.card
         if (row == null) {
             EmptyNote("${filter.label} 카드가 없습니다.")
-            return@Column
+            return@ScreenColumn
         }
 
         fun answer(rating: Rating) =
@@ -341,36 +327,31 @@ private fun ReviewPractice(
 
         Spacer(Modifier.height(24.dp))
 
-        MasuCard(Modifier.shake(verdict.shakeKey), glow = verdict.glow()) {
-            Column(
-                Modifier.fillMaxWidth().padding(vertical = 20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                JpText(row.glyph, if (row.glyph.length > 3) 34 else 64)
-                if (revealed) {
-                    Spacer(Modifier.height(18.dp))
-                    HorizontalDivider(Modifier.fillMaxWidth(0.35f), color = m.ruleSoft)
-                    Spacer(Modifier.height(16.dp))
-                    Text(
-                        row.meaning,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = m.sumi
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    // 단어 맞추기와 같은 줄들. 음독·훈독·예문이 줄마다 따로 소리 난다 —
-                    // 한 방으로 뭉쳐 두면 여기서만 예시 읽기밖에 못 듣는다.
-                    AnswerFace(row.says, row.link, speaker)
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "틀림 ${row.rec.ng} · 맞음 ${row.rec.ok} · 단계 ${row.rec.box}/${Srs.MASTERED_BOX}",
-                        fontSize = 11.sp,
-                        color = m.sumi3
-                    )
-                } else {
-                    Spacer(Modifier.height(18.dp))
-                    Text("뜻과 읽기를 떠올려 보세요", fontSize = 13.sp, color = m.sumi3)
-                }
+        QuizCard(verdict) {
+            JpText(row.glyph, if (row.glyph.length > 3) 34 else 64)
+            if (revealed) {
+                Spacer(Modifier.height(18.dp))
+                AnswerDivider()
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    row.meaning,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = m.sumi
+                )
+                Spacer(Modifier.height(12.dp))
+                // 단어 맞추기와 같은 줄들. 음독·훈독·예문이 줄마다 따로 소리 난다 —
+                // 한 방으로 뭉쳐 두면 여기서만 예시 읽기밖에 못 듣는다.
+                AnswerFace(row.says, row.link, speaker)
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    "틀림 ${row.rec.ng} · 맞음 ${row.rec.ok} · 단계 ${row.rec.box}/${Srs.MASTERED_BOX}",
+                    fontSize = 11.sp,
+                    color = m.sumi3
+                )
+            } else {
+                Spacer(Modifier.height(18.dp))
+                Text("뜻과 읽기를 떠올려 보세요", fontSize = 13.sp, color = m.sumi3)
             }
         }
 

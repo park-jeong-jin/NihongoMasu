@@ -150,9 +150,10 @@ class Settings(private val prefs: SharedPreferences) {
 /**
  * 학습 기록을 기기에 저장한다.
  *
- * 외부 데이터베이스 없이 SharedPreferences에 JSON 한 덩어리로 넣는다.
- * 카드가 400장 남짓이라 이 방식으로도 충분히 빠르고, 라이브러리를
- * 추가하지 않아 빌드가 단순해진다.
+ * 외부 데이터베이스 없이 SharedPreferences에 카드마다 한 칸씩 넣는다. 카드는
+ * 6,400장 남짓이라(가나 208 + 한자 1,031 + 단어 5,171) 기록을 한 덩어리로 묶으면
+ * 채점 한 번에 그 전체를 다시 짜야 한다. 한 장이 자기 칸만 쓰면 그 일이 없어지고,
+ * 라이브러리를 더하지 않아 빌드도 단순한 채로 남는다.
  *
  * 기록은 [records]에 담기며 Compose가 관찰하는 상태라 값이 바뀌면
  * 화면이 자동으로 다시 그려진다.
@@ -194,12 +195,9 @@ class Store(context: Context) {
     }
 
     private fun load() {
-        val raw = prefs.getString(KEY_RECORDS, null)
-        if (raw != null) {
-            runCatching {
-                val root = JSONObject(raw)
-                for (k in root.keys()) records[k] = root.getJSONObject(k).toRec()
-            }
+        for ((k, v) in prefs.all) {
+            if (!k.startsWith(KEY_REC) || v !is String) continue
+            runCatching { records[k.removePrefix(KEY_REC)] = JSONObject(v).toRec() }
         }
         val daysRaw = prefs.getString(KEY_DAYS, null)
         if (daysRaw != null) {
@@ -207,13 +205,28 @@ class Store(context: Context) {
         }
     }
 
-    private fun persist() {
-        val root = JSONObject()
-        for ((k, v) in records) root.put(k, v.toJson())
-        prefs.edit()
-            .putString(KEY_RECORDS, root.toString())
-            .putString(KEY_DAYS, _days.value.joinToString(","))
-            .apply()
+    /** 카드 한 장을 그 자리에 남긴다. 기록 전체를 다시 짜지 않는다. */
+    private fun put(id: String, rec: Rec) {
+        records[id] = rec
+        prefs.edit().putString(KEY_REC + id, rec.toJson().toString()).apply()
+    }
+
+    /** 카드 한 장을 기록에서 뺀다. */
+    private fun drop(id: String) {
+        records.remove(id)
+        prefs.edit().remove(KEY_REC + id).apply()
+    }
+
+    /**
+     * 기록을 통째로 갈아 끼운다. 파일 되돌리기와 전체 지우기가 쓴다 — 사용자가 한 번
+     * 누르는 일이라 채점 길에는 걸리지 않는다.
+     */
+    private fun replaceAll() {
+        prefs.edit().apply {
+            for (k in prefs.all.keys) if (k.startsWith(KEY_REC)) remove(k)
+            for ((k, v) in records) putString(KEY_REC + k, v.toJson().toString())
+            putString(KEY_DAYS, _days.value.joinToString(","))
+        }.apply()
     }
 
     /**
@@ -235,7 +248,7 @@ class Store(context: Context) {
         records.putAll(recs)
         _days.value = days
         forgetUndo()
-        persist()
+        replaceAll()
         return true
     }
 
@@ -250,9 +263,9 @@ class Store(context: Context) {
     /** 오늘 한 건 했다고 표시한다. 최근 120일만 남긴다. 연속기록 점이 이걸로 그려진다. */
     private fun touchToday() {
         val t = today()
-        if (!_days.value.contains(t)) {
-            _days.value = (_days.value + t).takeLast(120)
-        }
+        if (_days.value.contains(t)) return
+        _days.value = (_days.value + t).takeLast(120)
+        prefs.edit().putString(KEY_DAYS, _days.value.joinToString(",")).apply()
     }
 
     /**
@@ -267,9 +280,8 @@ class Store(context: Context) {
         undoId = id
         undoPrev = records[id]
         val base = if (traceScore == null) cur else Srs.trace(cur, traceScore, today())
-        records[id] = Srs.grade(base, rating, today())
+        put(id, Srs.grade(base, rating, today()))
         touchToday()
-        persist()
     }
 
     /**
@@ -285,9 +297,8 @@ class Store(context: Context) {
     fun undo() {
         val id = undoId ?: return
         val prev = undoPrev
-        if (prev == null) records.remove(id) else records[id] = prev
+        if (prev == null) drop(id) else put(id, prev)
         forgetUndo()
-        persist()
     }
 
     private fun forgetUndo() {
@@ -297,16 +308,15 @@ class Store(context: Context) {
 
     /** 오답 노트에서 지운다. 다시 처음부터 배우는 셈이 된다. */
     fun reset(id: String) {
-        records.remove(id)
+        drop(id)
         forgetUndo()
-        persist()
     }
 
     fun resetAll() {
         records.clear()
         forgetUndo()
         _days.value = emptyList()
-        persist()
+        replaceAll()
     }
 
     // ── 집계 ──
@@ -354,7 +364,10 @@ class Store(context: Context) {
 
     companion object {
         private const val KEY_SPEED = "speed_"
-        private const val KEY_RECORDS = "records_v1"
+
+        /** 카드 한 장의 기록. 뒤에 카드 ID가 붙는다 — `rec_あ`, `rec_J日`, `rec_V食べる`. */
+        private const val KEY_REC = "rec_"
+
         private const val KEY_DAYS = "days_v1"
     }
 }

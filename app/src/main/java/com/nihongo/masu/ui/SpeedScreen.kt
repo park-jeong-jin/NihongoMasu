@@ -1,11 +1,9 @@
 package com.nihongo.masu.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -86,13 +84,7 @@ fun SpeedFlow(
 @Composable
 private fun SpeedMenu(store: Store, onPick: (SpeedKind) -> Unit) {
     val m = LocalMasu.current
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         Text(
             "${ROUND}초 동안 몇 장을 넘기는지 잽니다. 복습 기록에는 남지 않고\n" +
                 "판마다 최고 점수만 남습니다.",
@@ -255,13 +247,7 @@ private fun SpeedBoard(
 ) {
     SpeedTimer(run, onEnd)
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         when (run.phase) {
             SpeedPhase.READY -> SpeedReady(run, label, howto, ready, blocked)
 

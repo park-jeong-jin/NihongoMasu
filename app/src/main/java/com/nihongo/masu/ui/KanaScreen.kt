@@ -1,8 +1,6 @@
 package com.nihongo.masu.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -94,22 +92,16 @@ private fun KanaPractice(
 
     LaunchedEffect(script) { rebuild() }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         if (session.done) {
             CycleDone(session, onClose) { rebuild() }
-            return@Column
+            return@ScreenColumn
         }
 
         val card = session.card
         if (card == null) {
             NothingDue(store)
-            return@Column
+            return@ScreenColumn
         }
 
         QuizHeader(session, script.label)
@@ -132,13 +124,7 @@ private fun KanaPractice(
 @Composable
 private fun KanaScopeMenu(store: Store, onPick: (Script) -> Unit) {
     val m = LocalMasu.current
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         Text(
             "익힐 서체를 고르세요. 청음·탁음·요음을 섞어서 냅니다.\n" +
                 "글자를 보고 로마자를 치는 문제와 소리를 듣고 쓰는 문제가 섞여 나옵니다.",

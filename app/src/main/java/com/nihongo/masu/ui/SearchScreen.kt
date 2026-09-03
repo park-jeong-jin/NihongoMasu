@@ -1,10 +1,8 @@
 package com.nihongo.masu.ui
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -33,13 +31,7 @@ fun SearchScreen(store: Store, speaker: Speaker) {
     var q by remember { mutableStateOf("") }
     val hits = remember(q) { search(q) }
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         OutlinedTextField(
             value = q,
             onValueChange = { q = it },
@@ -59,11 +51,11 @@ fun SearchScreen(store: Store, speaker: Speaker) {
 
         if (q.isBlank()) {
             EmptyNote("글자, 읽기, 한국어 뜻 아무거나 치세요.")
-            return@Column
+            return@ScreenColumn
         }
         if (hits.isEmpty()) {
             EmptyNote("'$q'에 걸리는 것이 없습니다.")
-            return@Column
+            return@ScreenColumn
         }
 
         SectionLabel(

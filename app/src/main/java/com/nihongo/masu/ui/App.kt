@@ -134,8 +134,7 @@ fun App(store: Store, speaker: Speaker) {
                     Modifier.padding(start = 28.dp, top = 28.dp, bottom = 18.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text("日本", fontFamily = JpFont, fontSize = 22.sp, color = m.sumi, letterSpacing = 3.sp)
-                    Text("語", fontFamily = JpFont, fontSize = 22.sp, color = m.shu, letterSpacing = 3.sp)
+                    Logo(22)
                 }
 
                 DrawerRow("오늘", here == Screen.Home) { openFromDrawer(Screen.Home) }
@@ -185,8 +184,7 @@ fun App(store: Store, speaker: Speaker) {
                         )
                     }
                     if (here == Screen.Home) {
-                        Text("日本", fontFamily = JpFont, fontSize = 20.sp, color = m.sumi, letterSpacing = 3.sp)
-                        Text("語", fontFamily = JpFont, fontSize = 20.sp, color = m.shu, letterSpacing = 3.sp)
+                        Logo(20)
                     } else {
                         Text(
                             here.title,
@@ -265,6 +263,14 @@ fun App(store: Store, speaker: Speaker) {
     }
 }
 
+/** 글자 로고. 「語」한 자만 붉게 둔다 — 드로어와 상단 바가 같은 자리를 쓴다. */
+@Composable
+private fun Logo(size: Int) {
+    val m = LocalMasu.current
+    Text("日本", fontFamily = JpFont, fontSize = size.sp, color = m.sumi, letterSpacing = 3.sp)
+    Text("語", fontFamily = JpFont, fontSize = size.sp, color = m.shu, letterSpacing = 3.sp)
+}
+
 /**
  * 복습이 어떻게 도는지 설명한다. 홈 상단 ⓘ로 연다.
  *
@@ -333,13 +339,7 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     val learning = (stages[Stage.LEARNING] ?: 0) + (stages[Stage.YOUNG] ?: 0)
     val kanaStages = store.countStages(kanaIds)
 
-    Column(
-        Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp)
-    ) {
+    ScreenColumn {
         // 밀린 복습 수는 이 앱에서 가장 먼저 봐야 할 숫자다. 그라데이션 머리에
         // 홀로 얹어 시선이 딴 데로 새지 않게 한다.
         val shownDue by animateIntAsState(due, tween(700), label = "dueCount")
@@ -461,6 +461,11 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     }
 }
 
+/** 기능 색을 두른 테두리. 타일과 한 줄짜리 행이 같은 두께·농도를 쓴다. */
+@Composable
+private fun Tile.stroke() =
+    BorderStroke(1.5.dp, accent.copy(alpha = if (LocalMasu.current.dark) 0.55f else 0.40f))
+
 /** 홈 격자 한 칸. */
 private data class Tile(
     val feature: Feature,
@@ -482,11 +487,7 @@ private fun FeatureRow(t: Tile, modifier: Modifier = Modifier, onClick: () -> Un
     Row(
         modifier
             .fillMaxWidth()
-            .pressSurface(
-                RoundedCornerShape(16.dp),
-                m.card,
-                BorderStroke(1.5.dp, t.accent.copy(alpha = if (m.dark) 0.55f else 0.40f))
-            ) { onClick() }
+            .pressSurface(RoundedCornerShape(16.dp), m.card, t.stroke()) { onClick() }
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -515,11 +516,7 @@ private fun FeatureTile(t: Tile, modifier: Modifier = Modifier, onClick: () -> U
     Box(
         modifier
             .fillMaxHeight()
-            .pressSurface(
-                shape,
-                m.card,
-                BorderStroke(1.5.dp, t.accent.copy(alpha = if (m.dark) 0.55f else 0.40f))
-            ) { onClick() }
+            .pressSurface(shape, m.card, t.stroke()) { onClick() }
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp)) {
             Text(t.feature.label, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = m.sumi)
