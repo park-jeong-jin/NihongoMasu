@@ -46,12 +46,15 @@ class ClozeTest {
         assertTrue(Cloze.BLANK in Cloze.blank(one))
         assertTrue(Cloze.BLANK in Cloze.blank(two))
         // 한 글자와 두 글자가 같은 폭으로 가려진다
-        assertEquals("＿＿＿で会社へ行きます。", Cloze.blank(two))
+        assertEquals("${Cloze.BLANK}で会社へ行きます。", Cloze.blank(two))
+        // 칸 사이에 낱말 이음쇠가 있어야 줄바꿈이 칸을 두 줄로 쪼개지 않는다
+        assertEquals(5, Cloze.BLANK.length)
+        assertEquals(2, Cloze.BLANK.count { it == '\u2060' })
     }
 
     @Test fun `표기가 두 번 나오면 두 자리가 다 가려진다`() {
         val w = VocabData.all.first { it.w == "歌" }
-        assertEquals("あなたに＿＿＿を＿＿＿ってほしいです。", Cloze.blank(w))
+        assertEquals("あなたに${Cloze.BLANK}を${Cloze.BLANK}ってほしいです。", Cloze.blank(w))
     }
 
     @Test fun `통은 표기가 통째로 든 예문만 담는다`() {

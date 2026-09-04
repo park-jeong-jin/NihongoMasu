@@ -133,10 +133,13 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
         Spacer(Modifier.height(14.dp))
 
         QuizCard(verdict) {
-            val blanked = Cloze.blank(word)
+            // 채점하면 이 자리가 그대로 메워진다. 복원한 문장을 아래에 따로 놓으면
+            // 같은 문장을 위아래로 두 번 읽는 데다, 정답면의 「예문」 줄에도 또 있어
+            // 한 카드에 세 번 나온다.
+            val shown = if (picked == null) Cloze.blank(word) else word.ex
             JpText(
-                blanked,
-                if (blanked.length > 18) 22 else 28,
+                shown,
+                if (shown.length > 18) 22 else 28,
                 Modifier.padding(horizontal = 14.dp)
             )
 
@@ -157,8 +160,6 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
             } else {
                 Spacer(Modifier.height(18.dp))
                 AnswerDivider()
-                Spacer(Modifier.height(16.dp))
-                JpText(word.ex, 22, Modifier.padding(horizontal = 14.dp))
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.padding(horizontal = 14.dp)) {
                     AnswerFace(saysOf(word), linksOf(word), speaker)
