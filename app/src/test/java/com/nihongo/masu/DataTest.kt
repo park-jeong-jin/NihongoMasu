@@ -31,9 +31,9 @@ class DataTest {
         assertEquals(653, VocabData.of(Level.N4, VocabData.ALL_TAGS).size)
         assertEquals(2062, VocabData.of(Level.N3, VocabData.ALL_TAGS).size)
         assertEquals(1746, VocabData.of(Level.N2, VocabData.ALL_TAGS).size)
-        assertEquals(55, VocabData.of(Level.JOB, VocabData.ALL_TAGS).size)
+        assertEquals(110, VocabData.of(Level.JOB, VocabData.ALL_TAGS).size)
         assertEquals(1031, KanjiData.all.size)
-        assertEquals(5226, VocabData.all.size)
+        assertEquals(5281, VocabData.all.size)
     }
 
     @Test fun `카드 열쇠가 전부 다르다`() {
