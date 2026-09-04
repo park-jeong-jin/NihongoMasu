@@ -31,8 +31,8 @@ class TokensTest {
     }
 
     @Test fun `조각 수가 유지된다`() {
-        assertEquals(49879, VocabData.all.sumOf { TokenData.of(it).size })
-        assertEquals(23179, VocabData.all.sumOf { w -> TokenData.of(w).count { it.content } })
+        assertEquals(50258, VocabData.all.sumOf { TokenData.of(it).size })
+        assertEquals(23345, VocabData.all.sumOf { w -> TokenData.of(w).count { it.content } })
     }
 
     @Test fun `내용어 대부분에 뜻이 붙는다`() {
