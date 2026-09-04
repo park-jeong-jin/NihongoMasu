@@ -90,18 +90,30 @@ private val Screen.feature: Feature?
         is Screen.Practice -> feature
     }
 
+/** ⓘ로 열리는 설명 하나. */
+private enum class Explainer { SRS, CLOZE }
+
 /**
  * 이 화면의 ⓘ 설명. null이면 상단 바에 아이콘도 안 뜬다.
  *
- * 아이콘을 띄우는 조건과 띄울 내용을 한 자리에 묶어 둔다. 갈라 두면 설명을 붙일
- * 화면을 하나 더 늘렸을 때 조건만 고치고 내용은 안 고쳐서, 엉뚱한 설명이 조용히 뜬다.
+ * 어느 것을 띄울지만 정하고 그리는 것은 [ExplainerDialog]가 맡는다. 컴포즈 함수를
+ * 프로퍼티에 담으면 App을 다시 그릴 때마다 기억되지 않는 람다가 새로 생긴다.
+ *
+ * 갈라 두어도 엉뚱한 설명이 뜰 일은 없다 — 설명을 하나 늘리면 [Explainer]에 값이
+ * 하나 늘고, [ExplainerDialog]의 `when`이 빠진 값을 컴파일 때 잡는다.
  */
-private val Screen.explainer: (@Composable (() -> Unit) -> Unit)?
+private val Screen.explainer: Explainer?
     get() = when (this) {
-        Screen.Home -> { onDismiss -> SrsExplainer(onDismiss) }
-        Screen.Menu(Feature.CLOZE) -> { onDismiss -> ClozeExplainer(onDismiss) }
+        Screen.Home -> Explainer.SRS
+        Screen.Menu(Feature.CLOZE) -> Explainer.CLOZE
         else -> null
     }
+
+@Composable
+private fun ExplainerDialog(which: Explainer, onDismiss: () -> Unit) = when (which) {
+    Explainer.SRS -> SrsExplainer(onDismiss)
+    Explainer.CLOZE -> ClozeExplainer(onDismiss)
+}
 
 /** 상단 바에 쓸 이름. 홈만 글자 로고를 쓰므로 비워 둔다. */
 private val Screen.title: String
@@ -124,6 +136,10 @@ fun App(store: Store, speaker: Speaker) {
     val stack = remember { mutableStateListOf<Screen>(Screen.Home) }
     val here = stack.last()
     val explainer = here.explainer
+
+    // 설명은 그것을 띄운 화면의 것이다. 띄운 채로 화면을 옮기면 내려놓는다 —
+    // 켜 둔 표시만 남으면 설명이 붙은 다음 화면에 들어서는 순간 저절로 뜬다.
+    LaunchedEffect(here) { explaining = false }
     val atRoot = stack.size == 1
     val showsDrawerIcon = here !is Screen.Practice
 
@@ -277,8 +293,7 @@ fun App(store: Store, speaker: Speaker) {
             }
         }
 
-        // 설명을 띄운 채 화면을 옮기면 explainer가 null이 되어 저절로 닫힌다.
-        if (explaining) explainer?.invoke { explaining = false }
+        if (explaining && explainer != null) ExplainerDialog(explainer) { explaining = false }
     }
 }
 
@@ -499,7 +514,9 @@ fun HomeScreen(store: Store, speaker: Speaker, go: (Screen) -> Unit) {
             // 적는 자리에 여기는 통 크기를 적는다.
             Tile(
                 Feature.CLOZE, "예문의 빈칸을 넷 중에서.",
-                "예문 ${Cloze.total}개에서 뽑습니다",
+                // 통 크기는 단어 수다. 예문 수로 적으면 안 맞는다 — 예문을 나눠 쓰는
+                // 단어가 102쌍 있어 서로 다른 문장은 4,142개뿐이다.
+                "단어 ${Cloze.total}개에서 뽑습니다",
                 null, 0, m.sora
             ),
             Tile(

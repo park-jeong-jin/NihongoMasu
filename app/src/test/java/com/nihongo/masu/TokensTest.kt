@@ -1,5 +1,6 @@
 package com.nihongo.masu
 
+import com.nihongo.masu.data.KanjiData
 import com.nihongo.masu.data.TokenData
 import com.nihongo.masu.data.VocabData
 import org.junit.Assert.assertEquals
@@ -37,10 +38,26 @@ class TokensTest {
     @Test fun `내용어 대부분에 뜻이 붙는다`() {
         val content = VocabData.all.flatMap { TokenData.of(it) }.filter { it.content }
         val glossed = content.count { TokenData.meaningOf(it) != null }
-        // 78.3%. 남는 것은 いる·ある·の·こと·よう처럼 사전에서 찾을 말이 아니거나
+        // 78.2%. 남는 것은 いる·ある·の·こと·よう처럼 사전에서 찾을 말이 아니거나
         // 분석기가 名詞로 잘못 태깅한 것들이다.
         assertTrue("뜻이 붙는 비율이 떨어졌다: $glossed / ${content.size}",
             glossed * 100 / content.size >= 78)
+    }
+
+    @Test fun `뜻도 쓰인 꼴로 내려가지 않는다`() {
+        // 뜻은 화면에서 기본형 옆에 적힌다. 쓰인 꼴로 찾으면 그 꼴의 뜻이 남의
+        // 이름표를 달아 `いい → いう · 좋다`, `よく → よい · 자주·잘`이 나간다.
+        VocabData.all.forEach { w ->
+            TokenData.of(w).forEach { t ->
+                val mean = TokenData.meaningOf(t) ?: return@forEach
+                val fromBase = TokenData.entryOf(t)?.mean
+                val fromKanji = t.base.singleOrNull()?.let { KanjiData.of(it)?.mean }
+                assertTrue(
+                    "${t.surface} → ${t.base} · $mean 은 기본형에서 온 뜻이 아니다",
+                    mean == fromBase || mean == fromKanji
+                )
+            }
+        }
     }
 
     @Test fun `기본형에는 기본형의 읽기가 붙는다`() {

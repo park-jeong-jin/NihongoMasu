@@ -9,7 +9,7 @@ package com.nihongo.masu.data
  */
 data class Word(
     val w: String, val read: String, val mean: String, val tag: String,
-    val level: Jlpt, val ex: String, val exRead: String, val exMean: String
+    val level: Level, val ex: String, val exRead: String, val exMean: String
 ) {
     val id: String get() = "V$w"
 
@@ -28,14 +28,14 @@ data class Word(
 
 object VocabData {
     val all: List<Word> = table("vocab.tsv").map {
-        Word(it[0], it[1], it[2], it[3], Jlpt.valueOf(it[4]), it[5], it[6], it[7])
+        Word(it[0], it[1], it[2], it[3], Level.valueOf(it[4]), it[5], it[6], it[7])
     }
 
     /** 어느 등급에서 실제로 쓰이는 분류만. 등급마다 분류 구성이 다르다. */
-    fun tagsOf(level: Jlpt): List<String> =
+    fun tagsOf(level: Level): List<String> =
         all.filter { it.level == level }.map { it.tag }.distinct()
 
-    fun of(level: Jlpt, tag: String): List<Word> =
+    fun of(level: Level, tag: String): List<Word> =
         all.filter { it.level == level && (tag == ALL_TAGS || it.tag == tag) }
 
     /**

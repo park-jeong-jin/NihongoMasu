@@ -30,9 +30,12 @@ object TokenData {
     /**
      * 표기 → 끊어 둔 줄. 줄을 미리 다 쪼개 두지 않는다 — 토큰이 47,573개라
      * 앱을 켤 때마다 다 만들어 두면 화면에 한 번도 안 뜨는 것까지 만든다.
+     *
+     * 쪼갠 줄은 [of]가 여기서 **덜어낸다.** 안 덜면 본 문장이 원본 문자열과
+     * 쪼갠 [Tok]으로 두 벌씩 남는다 — 오답 노트를 한 번 훑으면 400문장이 그렇게 된다.
      */
-    private val lines: Map<String, String> by lazy {
-        table("tokens.tsv").associate { it[0] to it[1] }
+    private val lines: MutableMap<String, String> by lazy {
+        table("tokens.tsv").associateTo(HashMap()) { it[0] to it[1] }
     }
 
     /** 표기로 찾는 단어. 눌린 조각의 뜻을 여기서 뗀다. */
@@ -48,7 +51,7 @@ object TokenData {
     private val cut = HashMap<String, List<Tok>>()
 
     fun of(w: Word): List<Tok> = cut.getOrPut(w.w) {
-        lines[w.w].orEmpty().split(' ')
+        lines.remove(w.w).orEmpty().split(' ')
             .filter { it.isNotBlank() }
             .map { part ->
                 // 생성기(`tools/Tok.java`)가 `표면형:기본형:읽기:품사` 네 칸을 꼭 맞춰
@@ -67,15 +70,20 @@ object TokenData {
     /**
      * 조각의 한국어 뜻. 붙일 것이 없으면 null이다.
      *
-     * 기본형으로 먼저 찾고 문장에 쓰인 꼴로 한 번 더 찾는다 — 단어표에 활용형이
-     * 표제어로 오른 것도 있다. 한 자짜리는 한자표까지 본다: 단어표에 없는 `韓国`의
-     * `国`처럼, 낱자 뜻이라도 있는 편이 아무것도 없는 것보다 낫다.
+     * **기본형으로만 찾는다** — [entryOf]와 같은 규칙이다. 화면은 이 뜻을 기본형
+     * 옆에 적으므로, 쓰인 꼴로 한 번 더 찾으면 그 꼴의 뜻이 다른 낱말에 붙는다:
+     * 분석기가 `いい`의 기본형을 `言う`로 내는데 쓰인 꼴로 찾으면 `いい → いう · 좋다`,
+     * `よく → よい · 자주·잘`, `たち → たつ · 들`이 되어 없는 낱말을 가르친다.
+     * 그렇게 뜻이 붙던 것은 45자리(서로 다른 짝 16개)이고, 지금은 뜻 없이 회색으로 남는다.
+     *
+     * 한 자짜리는 한자표까지 본다: 단어표에 없는 `韓国`의 `国`처럼, 낱자 뜻이라도
+     * 있는 편이 아무것도 없는 것보다 낫다.
      *
      * `いる`·`ある`·`こと`·`よう`·`られる` 같은 것은 어느 쪽에도 없다. 내용어로
      * 태깅되지만 사전에서 찾을 말이 아니라, 그대로 뜻 없이 둔다.
      */
     fun meaningOf(tok: Tok): String? =
-        (byWord[tok.base] ?: byWord[tok.surface])?.mean
+        byWord[tok.base]?.mean
             ?: tok.base.singleOrNull()?.takeIf { it.isKanji() }?.let { KanjiData.of(it)?.mean }
 
     /**
@@ -89,7 +97,7 @@ object TokenData {
      * **쓰인 꼴로는 찾지 않는다.** 단어표에 활용형이 표제어로 오른 것이 17개 있는데
      * (`下さい`·`観`·`楽しみ`·`酔っ払い`…) 그 줄의 읽기는 쓰인 꼴의 읽기라, 기본형
      * 옆에 붙이면 `下さる · ください`·`観る · かん`이 되어 막으려던 그 짝이 도로 나온다.
-     * 뜻은 쓰인 꼴로 찾아도 맞으므로 [meaningOf]는 두 번 찾는 것을 그대로 둔다.
+     * [meaningOf]도 같은 이유로 쓰인 꼴을 안 본다.
      */
     fun entryOf(tok: Tok): Word? = byWord[tok.base]
 }

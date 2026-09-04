@@ -35,20 +35,37 @@ object Cloze {
      * `友達` → `＿＿＿達と映画を見ます`. 등급마다 500장이 넘어 활용형 400여 개를
      * 빼도 한 판([ROUND]장)에는 넘친다.
      *
-     * [readable]까지 요구하는 이유는 「읽기 보기」가 정답을 흘리지 않아야 하기
-     * 때문이다 — 아래를 보라.
+     * [enough]와 [readable]까지 요구하는 이유는 아래를 보라 — 앞의 것은 빈칸
+     * 밖에 문장이 남게, 뒤의 것은 「읽기 보기」가 정답을 흘리지 않게 한다.
      */
-    fun pool(level: Jlpt): List<Word> = pools.getValue(level)
+    fun pool(level: Level): List<Word> = pools[level].orEmpty()
 
     /**
-     * 등급마다 한 번만 걸러 둔다. 홈 타일이 [total]을 읽느라 켜자마자 어차피 네
-     * 등급을 다 훑는데, 판을 깔 때마다 또 훑을 이유가 없다.
+     * 한 번만 걸러 둔다. 홈 타일이 [total]을 읽느라 켜자마자 통이 만들어지므로
+     * 이 걸러내기가 첫 화면에 얹힌다 — 5,171줄을 등급마다 한 번씩 네 번 훑지 않고
+     * 한 번 훑어 등급으로 묶는다.
      */
-    private val pools: Map<Jlpt, List<Word>> by lazy {
-        Jlpt.entries.associateWith { level ->
-            VocabData.of(level, VocabData.ALL_TAGS).filter { it.w in it.ex && readable(it) }
-        }
+    private val pools: Map<Level, List<Word>> by lazy {
+        VocabData.all
+            .filter { it.w in it.ex && enough(it) && readable(it) }
+            .groupBy { it.level }
     }
+
+    /**
+     * 빈칸을 파고도 문장이 남는 단어인가.
+     *
+     * 인사말은 예문이 그 인사말 하나로 되어 있어 가리면 문제가 사라진다 —
+     * `いらっしゃいませ。` → `＿＿＿ませ。`, `先生、さようなら。` → `先生、＿＿＿。`.
+     * 같은 분류에서 뽑은 넷 중 어느 것이 들어갈지 가릴 근거가 문장에 없다.
+     * 표기 뺀 나머지 다섯 자를 요구하면 이런 13개가 빠지고, `私は学生です。`처럼
+     * 조사와 서술어가 남아 자리를 정해 주는 문장은 남는다.
+     *
+     * 길이로만 재는 것이라 표기가 더 긴 낱말 안에 든 경우는 못 걸러낸다 —
+     * `肩`의 예문 `今肩慣らししているところです。`는 `今＿＿＿慣らし…`가 되어
+     * 빈칸이 `肩慣らし`를 가른다. 그걸 잡으려면 문장을 낱말로 끊어 봐야 하는데,
+     * `tokens.tsv`를 통 만드는 데까지 끌어들일 값어치는 아직 없다.
+     */
+    private fun enough(w: Word): Boolean = w.ex.length - w.w.length >= 5
 
     /**
      * 예문 읽기에서도 표제어를 가릴 수 있는 단어인가.
@@ -81,6 +98,15 @@ object Cloze {
      * 읽기는 나머지 글자만 풀어 주고 빈칸은 빈칸으로 남긴다.
      */
     fun blankRead(w: Word): String = w.exRead.replace(w.read, BLANK)
+
+    /**
+     * 보이는 글자 수. 글자 크기를 정할 때 쓴다.
+     *
+     * [BLANK]에 낀 낱말 이음쇠는 폭을 안 차지하는데 [String.length]는 센다.
+     * 그냥 세면 빈칸 수만큼 길이가 부풀어, 같은 폭으로 그려질 두 문장이
+     * 정답 길이에 따라 서로 다른 크기로 나온다.
+     */
+    fun glyphs(s: String): Int = s.count { it != '\u2060' }
 
     /** 네 등급을 통틀어 쓸 수 있는 단어 수. 홈 타일이 통 크기를 적는다. */
     val total: Int by lazy { pools.values.sumOf { it.size } }

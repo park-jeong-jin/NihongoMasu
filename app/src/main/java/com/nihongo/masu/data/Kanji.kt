@@ -1,7 +1,10 @@
 package com.nihongo.masu.data
 
-/** JLPT 등급. 숫자가 작을수록 쉽다 — N5가 입문, N2가 중상급이다. */
-enum class Jlpt(val label: String) { N5("N5"), N4("N4"), N3("N3"), N2("N2") }
+/**
+ * 익힘 범위 한 칸. 지금은 넷 다 JLPT 등급이고 숫자가 작을수록 쉽다 —
+ * N5가 입문, N2가 중상급이다. tsv 등급 칸에 이 멤버 이름이 그대로 적힌다.
+ */
+enum class Level(val label: String) { N5("N5"), N4("N4"), N3("N3"), N2("N2") }
 
 /**
  * 한자 한 자.
@@ -15,7 +18,7 @@ enum class Jlpt(val label: String) { N5("N5"), N4("N4"), N3("N3"), N2("N2") }
 data class Kanji(
     val c: String, val mean: String, val on: String, val kun: String,
     val ex: String, val exRead: String, val exMean: String,
-    val level: Jlpt, val parts: String = ""
+    val level: Level, val parts: String = ""
 ) {
     val id: String get() = "J$c"
 }
@@ -43,11 +46,11 @@ object KanjiData {
     val all: List<Kanji> = table("kanji.tsv").map {
         Kanji(
             it[0], it[1], it[2], it[3], it[4], it[5], it[6],
-            Jlpt.valueOf(it[7]), it.getOrElse(8) { "" }
+            Level.valueOf(it[7]), it.getOrElse(8) { "" }
         )
     }
 
-    fun of(level: Jlpt): List<Kanji> = all.filter { it.level == level }
+    fun of(level: Level): List<Kanji> = all.filter { it.level == level }
 
     /**
      * 한자 한 자로 되짚는다. 단어 표기에 든 글자를 그 자리에서 풀어 보여주는 데 쓴다.

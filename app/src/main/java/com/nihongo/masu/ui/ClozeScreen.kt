@@ -17,7 +17,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nihongo.masu.data.Cloze
-import com.nihongo.masu.data.Jlpt
+import com.nihongo.masu.data.Level
 import com.nihongo.masu.data.VocabData
 import com.nihongo.masu.data.Word
 import com.nihongo.masu.tts.Speaker
@@ -42,7 +42,7 @@ import com.nihongo.masu.tts.Speaker
 fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
     val m = LocalMasu.current
 
-    var level by remember { mutableStateOf(Jlpt.N5) }
+    var level by remember { mutableStateOf(Level.N5) }
 
     // 판을 다시 깔았다는 표시. 통을 remember의 열쇠로 쓰므로 이 값이 오르면
     // 카드가 새로 섞인다.
@@ -104,10 +104,12 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
 
     ScreenColumn {
         SegmentedRow(
-            options = Jlpt.entries.toList(),
+            options = Level.entries.toList(),
             selected = level,
             label = { it.label },
-            onSelect = { level = it; reset() }
+            // 이미 켜져 있는 것을 다시 눌러도 reset이 돌면, 등급을 바꾸려던 것이
+            // 아닌데 14번째 카드까지 쌓은 판이 점수 없이 1번으로 돌아간다.
+            onSelect = { if (it != level) { level = it; reset() } }
         )
         Spacer(Modifier.height(12.dp))
 
@@ -146,7 +148,7 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
             // 보이는 글자로 재면 답을 고르는 순간 문장이 커지며 줄이 다시 흐른다.
             JpText(
                 if (picked == null) blanked else word.ex,
-                if (blanked.length > 18) 22 else 28,
+                if (Cloze.glyphs(blanked) > 16) 22 else 28,
                 Modifier.padding(horizontal = 14.dp)
             )
 
@@ -241,6 +243,23 @@ private fun ChoiceRow(choice: Word, answer: Word, picked: Word?, onPick: () -> U
         // 채점 전에는 뜻을 안 보여준다 — 보기에 뜻이 붙어 있으면 문장을 읽지 않고
         // 뜻만 훑어서 고른다.
         if (picked != null) {
+            // 어느 것이 정답이고 어느 것을 골랐는지를 색만으로 두지 않는다.
+            // 초록·빨강이 안 갈리는 눈이나 흑백 화면에서는 두 줄이 똑같이 보여서,
+            // 이 판에서 실제로 배우는 자리가 그대로 사라진다.
+            val tag = when {
+                isAnswer -> "정답"
+                isPicked -> "내 답"
+                else -> null
+            }
+            if (tag != null) {
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    tag,
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isAnswer) m.ok else m.shu
+                )
+            }
             Spacer(Modifier.width(10.dp))
             Text(
                 choice.mean,

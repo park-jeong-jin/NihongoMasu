@@ -1,6 +1,6 @@
 package com.nihongo.masu
 
-import com.nihongo.masu.data.Jlpt
+import com.nihongo.masu.data.Level
 import com.nihongo.masu.data.cardIds
 import com.nihongo.masu.data.KanaData
 import com.nihongo.masu.data.KanjiData
@@ -23,14 +23,14 @@ class DataTest {
     private val kanaOnly = Regex("^[\\u3040-\\u309F\\u30A0-\\u30FF\\u3001\\u3002ー、。]+$")
 
     @Test fun `등급별 개수가 유지된다`() {
-        assertEquals(80, KanjiData.of(Jlpt.N5).size)
-        assertEquals(167, KanjiData.of(Jlpt.N4).size)
-        assertEquals(397, KanjiData.of(Jlpt.N3).size)
-        assertEquals(387, KanjiData.of(Jlpt.N2).size)
-        assertEquals(710, VocabData.of(Jlpt.N5, VocabData.ALL_TAGS).size)
-        assertEquals(653, VocabData.of(Jlpt.N4, VocabData.ALL_TAGS).size)
-        assertEquals(2062, VocabData.of(Jlpt.N3, VocabData.ALL_TAGS).size)
-        assertEquals(1746, VocabData.of(Jlpt.N2, VocabData.ALL_TAGS).size)
+        assertEquals(80, KanjiData.of(Level.N5).size)
+        assertEquals(167, KanjiData.of(Level.N4).size)
+        assertEquals(397, KanjiData.of(Level.N3).size)
+        assertEquals(387, KanjiData.of(Level.N2).size)
+        assertEquals(710, VocabData.of(Level.N5, VocabData.ALL_TAGS).size)
+        assertEquals(653, VocabData.of(Level.N4, VocabData.ALL_TAGS).size)
+        assertEquals(2062, VocabData.of(Level.N3, VocabData.ALL_TAGS).size)
+        assertEquals(1746, VocabData.of(Level.N2, VocabData.ALL_TAGS).size)
         assertEquals(1031, KanjiData.all.size)
         assertEquals(5171, VocabData.all.size)
     }
@@ -200,7 +200,7 @@ class DataTest {
     }
 
     @Test fun `분류 조회가 등급 안에서 전체를 나눈다`() {
-        Jlpt.entries.forEach { level ->
+        Level.entries.forEach { level ->
             val whole = VocabData.of(level, VocabData.ALL_TAGS)
             val byTag = VocabData.tagsOf(level).sumOf { VocabData.of(level, it).size }
             assertEquals("$level 분류 합계 불일치", whole.size, byTag)

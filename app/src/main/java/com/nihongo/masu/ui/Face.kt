@@ -59,7 +59,15 @@ data class Say(
      * 끊어 둔 예문. 있으면 [text] 위에 눌러 볼 수 있는 일본어 줄이 서고,
      * [text]에는 읽기와 뜻만 담는다 — 일본어 줄을 두 군데서 그리지 않는다.
      */
-    val tokens: List<Tok>? = null
+    val tokens: List<Tok>? = null,
+    /**
+     * 어느 카드의 줄인가. 눌러 둔 조각을 카드가 바뀔 때 놓는 데 쓴다.
+     *
+     * 내용으로 견주면 예문이 같은 카드끼리 안 갈린다 — 문장 맞추기 통에서만
+     * 예문을 나눠 쓰는 단어가 102쌍이라, 그 둘이 잇달아 나오면 안 누른 조각이
+     * 펼쳐진 채로 넘어온다.
+     */
+    val key: String = text
 )
 
 /** 정답면에서 이어지는 다른 카드 한 칸. */
@@ -80,16 +88,15 @@ data class LinkLine(val label: String, val items: List<Link>)
 private fun sayable(s: String) =
     if (s == "—") "" else s.replace("(", "").replace(")", "").replace("・", "、")
 
-fun saysOf(w: Word): List<Say> {
-    val toks = TokenData.of(w).ifEmpty { null }
-    // 끊어 둔 줄이 없으면 일본어를 그릴 데가 없다. 그때는 예문을 본문 맨 위에 도로
-    // 넣는다 — 안 그러면 읽기와 뜻만 남고 정작 문장이 통째로 사라진다.
-    val head = if (toks == null) "${w.ex}\n" else ""
-    return listOf(
-        Say("읽기", w.read),
-        Say("예문", "$head${w.exRead}\n${w.exMean}", w.exRead, toks)
-    )
-}
+/**
+ * 끊어 둔 줄이 없는 단어는 없다 — `TokensTest`가 5,171개 전부에 대고 확인한다.
+ * 그래서 예문을 본문에 도로 넣는 대비를 두지 않는다. 두면 테스트가 막아 둔 상태를
+ * 위한 코드가 되어, 둘 중 하나는 거짓말이 된다.
+ */
+fun saysOf(w: Word): List<Say> = listOf(
+    Say("읽기", w.read),
+    Say("예문", "${w.exRead}\n${w.exMean}", w.exRead, TokenData.of(w), w.id)
+)
 
 /**
  * 조각으로 뜻이 설명되는 글자에만 `parts`가 있다. 없으면 줄 자체를 뺀다 —
@@ -154,8 +161,11 @@ private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
      * 조각 자체가 아니라 몇 번째인지를 들고 있는 이유는 같은 말이 한 문장에 두 번
      * 나오는 예문이 91개 있기 때문이다(`何時に開いて何時に閉まりますか`의 `何`).
      * 값으로 견주면 둘이 한꺼번에 켜지고, 뒤엣것을 누르면 앞엣것과 같다고 보아 접힌다.
+     *
+     * 카드가 바뀌면 놓는다. 열쇠가 [Say.key]인 이유는 그쪽을 보라 — 조각 목록으로
+     * 잡으면 재그리기마다 목록을 통째로 견주는 데다 예문이 같은 카드끼리 안 갈린다.
      */
-    var picked by remember(say.tokens) { mutableStateOf<Int?>(null) }
+    var picked by remember(say.key) { mutableStateOf<Int?>(null) }
 
     Row(
         Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -174,7 +184,8 @@ private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
                 color = m.sumi,
                 modifier = Modifier.fillMaxWidth()
             )
-            picked?.let { at -> PickedRow(say.tokens!![at]) { text -> onSpeak(text) } }
+            val tok = picked?.let { say.tokens?.getOrNull(it) }
+            if (tok != null) PickedRow(tok) { text -> onSpeak(text) }
         }
         // 구성 설명처럼 읽어줄 게 없는 줄은 단추 대신 같은 폭을 비워 둔다.
         // 그래야 여러 줄의 본문 왼쪽 끝이 그대로 맞는다.
@@ -211,9 +222,15 @@ private fun TokenLine(tokens: List<Tok>, picked: Int?, onPick: (Int) -> Unit) {
      *
      * 기본형이 다르다는 것만으로 받으면 `い`(→`いる`)·`ん`처럼 우리 사전에 없는
      * 문법 요소가 눌린다. `い → いる`만 뜨는 자리는 배울 것이 없는데 칸은 차지한다.
-     * 내용어 22,069개 중 78.3%가 여기 걸리고, 나머지는 조사처럼 회색으로 남는다.
+     * 내용어 22,069개 중 78.2%가 여기 걸리고, 나머지는 조사처럼 회색으로 남는다.
+     *
+     * 문장마다 한 번만 판다. 조각당 사전을 세 번까지 뒤지는데 아래에서 자기 차례와
+     * 다음 조각을 볼 때 두 번씩 물으므로, 그리는 김에 재면 조각을 누를 때마다
+     * 한 줄이 열 몇 번씩 사전을 다시 뒤진다.
      */
-    fun worth(t: Tok): Boolean = t.content && TokenData.meaningOf(t) != null
+    val worthy = remember(tokens) {
+        tokens.map { it.content && TokenData.meaningOf(it) != null }
+    }
 
     /** 밑줄을 그을 글자 범위와, 그 조각이 눌려 있는지. */
     val underlines = ArrayList<Triple<Int, Int, Boolean>>()
@@ -221,7 +238,7 @@ private fun TokenLine(tokens: List<Tok>, picked: Int?, onPick: (Int) -> Unit) {
     val text = buildAnnotatedString {
         tokens.forEachIndexed { i, t ->
             val on = i == picked
-            if (worth(t)) {
+            if (worthy[i]) {
                 val from = length
                 withLink(
                     LinkAnnotation.Clickable(
@@ -235,7 +252,7 @@ private fun TokenLine(tokens: List<Tok>, picked: Int?, onPick: (Int) -> Unit) {
                 // 둘이 한 단어로 보이기 때문이다 — `全然分かり`의 `全然`과 `分かり`.
                 // 조사 앞뒤까지 다 띄우면 `遊ん で い ます`가 되어 문장이 부서진다.
                 // 조사는 회색이라 그것만으로 이미 갈린다.
-                if (tokens.getOrNull(i + 1)?.let { worth(it) } == true) append("\u2009")
+                if (worthy.getOrElse(i + 1) { false }) append("\u2009")
             } else {
                 withStyle(SpanStyle(color = m.sumi2)) { append(t.surface) }
             }

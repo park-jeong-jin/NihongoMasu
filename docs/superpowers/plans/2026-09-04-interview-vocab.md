@@ -957,7 +957,7 @@ awk -F'\t' '$5=="JOB" {print $4}' app/src/main/resources/vocab.tsv | sort | uniq
 
 ```bash
 grep -o 'tests="[0-9]*"' app/build/test-results/testDebugUnitTest/*.xml \
-  | cut -d'"' -f2 | paste -sd+ | bc
+  | cut -d'"' -f2 | paste -sd+ - | bc
 ```
 
 - [ ] **Step 2: `README.md`를 고친다**

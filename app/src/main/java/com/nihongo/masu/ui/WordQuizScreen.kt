@@ -64,7 +64,7 @@ fun WordQuizFlow(
     onOpen: () -> Unit,
     onClose: () -> Unit
 ) {
-    var level by remember { mutableStateOf(Jlpt.N5) }
+    var level by remember { mutableStateOf(Level.N5) }
     var tag by remember { mutableStateOf(VocabData.ALL_TAGS) }
     var dir by remember { mutableStateOf(Ask.MIX) }
 
@@ -103,15 +103,15 @@ fun WordQuizFlow(
 private fun WordScopeMenu(
     store: Store,
     kind: CardKind,
-    level: Jlpt,
-    onLevel: (Jlpt) -> Unit,
+    level: Level,
+    onLevel: (Level) -> Unit,
     onPick: (String) -> Unit
 ) {
     val m = LocalMasu.current
     val fixed = store.settings.ask
     ScreenColumn {
         SegmentedRow(
-            options = Jlpt.entries.toList(),
+            options = Level.entries.toList(),
             selected = level,
             label = { it.label },
             onSelect = onLevel
@@ -182,7 +182,7 @@ private fun faceOf(k: Kanji, dir: Ask): Face {
 private fun WordQuizScreen(
     store: Store,
     speaker: Speaker,
-    level: Jlpt,
+    level: Level,
     kind: CardKind,
     tag: String,
     dir: Ask,
