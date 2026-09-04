@@ -29,7 +29,8 @@ class ClozeTest {
         assertEquals(479, Cloze.pool(Level.N4).size)
         assertEquals(1697, Cloze.pool(Level.N3).size)
         assertEquals(1482, Cloze.pool(Level.N2).size)
-        assertEquals(4240, Cloze.total)
+        assertEquals(55, Cloze.pool(Level.JOB).size)
+        assertEquals(4295, Cloze.total)
     }
 
     @Test fun `가리면 문장이 남지 않는 단어는 통에서 빠진다`() {

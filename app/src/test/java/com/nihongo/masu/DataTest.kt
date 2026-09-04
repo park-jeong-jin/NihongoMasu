@@ -31,8 +31,9 @@ class DataTest {
         assertEquals(653, VocabData.of(Level.N4, VocabData.ALL_TAGS).size)
         assertEquals(2062, VocabData.of(Level.N3, VocabData.ALL_TAGS).size)
         assertEquals(1746, VocabData.of(Level.N2, VocabData.ALL_TAGS).size)
+        assertEquals(55, VocabData.of(Level.JOB, VocabData.ALL_TAGS).size)
         assertEquals(1031, KanjiData.all.size)
-        assertEquals(5171, VocabData.all.size)
+        assertEquals(5226, VocabData.all.size)
     }
 
     @Test fun `카드 열쇠가 전부 다르다`() {
@@ -225,6 +226,13 @@ class DataTest {
             else
                 assertTrue("읽기가 군더더기: ${it.w} · ${it.read}", it.read.isBlank())
         }
+    }
+
+    @Test fun `면접 등급에는 한자 카드가 없다`() {
+        // 한자 맞추기 세그먼트에서 이 등급을 감추는 근거다. 한자표에 JOB 줄을
+        // 넣게 되면 이 테스트가 먼저 터져서, 감추는 필터를 다시 볼 자리를 알려 준다.
+        assertTrue("면접 등급에 한자가 들어왔다", KanjiData.of(Level.JOB).isEmpty())
+        assertTrue("면접 등급에 단어가 없다", VocabData.of(Level.JOB, VocabData.ALL_TAGS).isNotEmpty())
     }
 
     @Test fun `요즘 쓰는 말은 둘 이상이라 다음 말을 고를 수 있다`() {

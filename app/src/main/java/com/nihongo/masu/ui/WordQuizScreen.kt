@@ -111,7 +111,12 @@ private fun WordScopeMenu(
     val fixed = store.settings.ask
     ScreenColumn {
         SegmentedRow(
-            options = Level.entries.toList(),
+            // 한자표에 줄이 없는 등급은 눌러도 빈 목록이 된다 — 「면접」에는 한자가 없다.
+            // 등급 이름을 여기 박지 않는 이유는, 한자표에 그 줄이 생기면 탭도
+            // 저절로 돌아와야 하기 때문이다.
+            options = Level.entries.filter {
+                kind != CardKind.KANJI || KanjiData.of(it).isNotEmpty()
+            },
             selected = level,
             label = { it.label },
             onSelect = onLevel
