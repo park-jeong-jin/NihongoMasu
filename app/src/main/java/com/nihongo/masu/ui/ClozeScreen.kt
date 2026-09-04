@@ -65,6 +65,8 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
     val verdict = rememberVerdict()
 
     fun reset() {
+        // 색이 떠 있는 채로 판을 갈면 다음 문제가 채점해도 색이 안 뜬다.
+        verdict.clear()
         at = 0
         ok = 0
         streak = 0
@@ -139,10 +141,12 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
             // 채점하면 이 자리가 그대로 메워진다. 복원한 문장을 아래에 따로 놓으면
             // 같은 문장을 위아래로 두 번 읽는 데다, 정답면의 「예문」 줄에도 또 있어
             // 한 카드에 세 번 나온다.
-            val shown = if (picked == null) Cloze.blank(word) else word.ex
+            val blanked = Cloze.blank(word)
+            // 글자 크기는 늘 빈칸 낀 쪽으로 잰다. 채점하면 문장이 짧아지므로
+            // 보이는 글자로 재면 답을 고르는 순간 문장이 커지며 줄이 다시 흐른다.
             JpText(
-                shown,
-                if (shown.length > 18) 22 else 28,
+                if (picked == null) blanked else word.ex,
+                if (blanked.length > 18) 22 else 28,
                 Modifier.padding(horizontal = 14.dp)
             )
 
@@ -182,10 +186,13 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
 
         if (picked != null) {
             Spacer(Modifier.height(6.dp))
+            // 채점 색이 걷히기 전에는 못 누른다. 그 사이에 넘기면 방금 문제의
+            // 초록·빨강과 흔들림이 다음 문제 위에 얹힌다.
             PrimaryButton(
                 if (at + 1 < deck.size) "다음" else "판 끝내기",
                 { at++; picked = null; hinted = false },
-                Modifier.fillMaxWidth()
+                Modifier.fillMaxWidth(),
+                enabled = verdict.correct == null
             )
         }
     }

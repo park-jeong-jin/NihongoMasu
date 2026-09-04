@@ -80,10 +80,16 @@ data class LinkLine(val label: String, val items: List<Link>)
 private fun sayable(s: String) =
     if (s == "—") "" else s.replace("(", "").replace(")", "").replace("・", "、")
 
-fun saysOf(w: Word): List<Say> = listOf(
-    Say("읽기", w.read),
-    Say("예문", "${w.exRead}\n${w.exMean}", w.exRead, TokenData.of(w))
-)
+fun saysOf(w: Word): List<Say> {
+    val toks = TokenData.of(w).ifEmpty { null }
+    // 끊어 둔 줄이 없으면 일본어를 그릴 데가 없다. 그때는 예문을 본문 맨 위에 도로
+    // 넣는다 — 안 그러면 읽기와 뜻만 남고 정작 문장이 통째로 사라진다.
+    val head = if (toks == null) "${w.ex}\n" else ""
+    return listOf(
+        Say("읽기", w.read),
+        Say("예문", "$head${w.exRead}\n${w.exMean}", w.exRead, toks)
+    )
+}
 
 /**
  * 조각으로 뜻이 설명되는 글자에만 `parts`가 있다. 없으면 줄 자체를 뺀다 —
@@ -141,8 +147,15 @@ fun AnswerFace(says: List<Say>, link: LinkLine?, speaker: Speaker) {
 private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
     val m = LocalMasu.current
 
-    /** 눌러 둔 조각. 줄을 옮겨 누르면 그 조각으로 갈리고, 같은 것을 다시 누르면 접힌다. */
-    var picked by remember(say.tokens) { mutableStateOf<Tok?>(null) }
+    /**
+     * 눌러 둔 조각의 **자리**. 줄을 옮겨 누르면 그 조각으로 갈리고, 같은 것을 다시
+     * 누르면 접힌다.
+     *
+     * 조각 자체가 아니라 몇 번째인지를 들고 있는 이유는 같은 말이 한 문장에 두 번
+     * 나오는 예문이 91개 있기 때문이다(`何時に開いて何時に閉まりますか`의 `何`).
+     * 값으로 견주면 둘이 한꺼번에 켜지고, 뒤엣것을 누르면 앞엣것과 같다고 보아 접힌다.
+     */
+    var picked by remember(say.tokens) { mutableStateOf<Int?>(null) }
 
     Row(
         Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -161,7 +174,7 @@ private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
                 color = m.sumi,
                 modifier = Modifier.fillMaxWidth()
             )
-            picked?.let { PickedRow(it) { text -> onSpeak(text) } }
+            picked?.let { at -> PickedRow(say.tokens!![at]) { text -> onSpeak(text) } }
         }
         // 구성 설명처럼 읽어줄 게 없는 줄은 단추 대신 같은 폭을 비워 둔다.
         // 그래야 여러 줄의 본문 왼쪽 끝이 그대로 맞는다.
@@ -190,7 +203,7 @@ private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
  * 눌린 조각만 진하게 두려면 이 길밖에 없다.
  */
 @Composable
-private fun TokenLine(tokens: List<Tok>, picked: Tok?, onPick: (Tok) -> Unit) {
+private fun TokenLine(tokens: List<Tok>, picked: Int?, onPick: (Int) -> Unit) {
     val m = LocalMasu.current
 
     /**
@@ -207,14 +220,14 @@ private fun TokenLine(tokens: List<Tok>, picked: Tok?, onPick: (Tok) -> Unit) {
 
     val text = buildAnnotatedString {
         tokens.forEachIndexed { i, t ->
-            val on = t == picked
+            val on = i == picked
             if (worth(t)) {
                 val from = length
                 withLink(
                     LinkAnnotation.Clickable(
                         tag = i.toString(),
                         styles = TextLinkStyles(SpanStyle(color = if (on) m.ai else m.sumi))
-                    ) { onPick(t) }
+                    ) { onPick(i) }
                 ) { append(t.surface) }
                 underlines.add(Triple(from, length, on))
 
@@ -249,11 +262,16 @@ private fun TokenLine(tokens: List<Tok>, picked: Tok?, onPick: (Tok) -> Unit) {
                 underlines.forEach { (from, to, on) ->
                     // 한 조각이 줄바꿈에 걸리면 줄마다 따로 그린다.
                     for (line in lr.getLineForOffset(from)..lr.getLineForOffset(to - 1)) {
+                        val end = lr.getLineEnd(line, visibleEnd = true)
                         val s0 = maxOf(from, lr.getLineStart(line))
-                        val s1 = minOf(to, lr.getLineEnd(line))
+                        val s1 = minOf(to, end)
                         if (s1 <= s0) continue
                         val x0 = lr.getHorizontalPosition(s0, true)
-                        val x1 = lr.getHorizontalPosition(s1, true)
+                        // 줄 끝 자리를 그대로 물으면 그 자리는 이미 다음 줄 것이라
+                        // 다음 줄 왼쪽 끝(≈0)이 돌아와 폭이 음수가 된다. 줄에 꽉 찬
+                        // 조각은 줄의 오른쪽 끝을 그대로 쓴다.
+                        val x1 = if (s1 >= end) lr.getLineRight(line)
+                        else lr.getHorizontalPosition(s1, true)
                         drawRoundRect(
                             color = if (on) m.ai else m.rule,
                             topLeft = Offset(x0, lr.getLineBottom(line) - lift - thick),
@@ -307,7 +325,8 @@ private fun PickedRow(tok: Tok, onSpeak: (String) -> Unit) {
             lineHeight = 21.sp,
             modifier = Modifier.weight(1f)
         )
-        IconButton(onClick = { onSpeak(tok.base) }, modifier = Modifier.size(34.dp)) {
+        // 기본형은 한자뿐인 것이 많아 엔진이 음훈을 잘못 고른다. 읽기가 있으면 그쪽이다.
+        IconButton(onClick = { onSpeak(read ?: tok.base) }, modifier = Modifier.size(34.dp)) {
             Icon(Icons.Filled.PlayArrow, "${tok.base} 발음 듣기", tint = m.ai)
         }
     }

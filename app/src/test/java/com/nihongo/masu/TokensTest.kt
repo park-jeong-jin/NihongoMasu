@@ -53,6 +53,17 @@ class TokensTest {
         assertNotNull(TokenData.meaningOf(tok))
     }
 
+    @Test fun `표제어를 찾을 때 쓰인 꼴로 내려가지 않는다`() {
+        // 쓰인 꼴로도 찾으면 활용형이 표제어로 오른 17개(`下さい`·`観`·`楽しみ`…)에서
+        // 그 줄의 읽기가 기본형 옆에 붙어 `下さる · ください`가 된다.
+        VocabData.all.forEach { w ->
+            TokenData.of(w).forEach { t ->
+                val e = TokenData.entryOf(t) ?: return@forEach
+                assertEquals("${t.surface} → ${t.base}의 표제어", t.base, e.w)
+            }
+        }
+    }
+
     @Test fun `조사와 기호는 내용어가 아니다`() {
         val w = VocabData.all.first { it.w == "友達" }
         val toks = TokenData.of(w)

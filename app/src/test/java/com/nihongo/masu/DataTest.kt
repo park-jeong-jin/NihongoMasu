@@ -5,6 +5,7 @@ import com.nihongo.masu.data.cardIds
 import com.nihongo.masu.data.KanaData
 import com.nihongo.masu.data.KanjiData
 import com.nihongo.masu.data.Script
+import com.nihongo.masu.data.SlangData
 import com.nihongo.masu.data.VocabData
 import com.nihongo.masu.data.isKanji
 import org.junit.Assert.assertEquals
@@ -204,5 +205,31 @@ class DataTest {
             val byTag = VocabData.tagsOf(level).sumOf { VocabData.of(level, it).size }
             assertEquals("$level 분류 합계 불일치", whole.size, byTag)
         }
+    }
+
+    @Test fun `요즘 쓰는 말은 칸이 다 차 있고 표기가 겹치지 않는다`() {
+        assertEquals(93, SlangData.all.size)
+        SlangData.all.forEach {
+            assertTrue("뜻 없음: ${it.w}", it.mean.isNotBlank())
+            assertTrue("쓰는 자리 없음: ${it.w}", it.note.isNotBlank())
+        }
+        val ws = SlangData.all.map { it.w }
+        assertEquals("표기가 겹침", ws.size, ws.distinct().size)
+    }
+
+    @Test fun `요즘 쓰는 말의 읽기는 한자가 든 것에만 붙어 있다`() {
+        // 가나 표기에 읽기를 또 달면 「ドンマイ · どんまい」처럼 같은 소리를 두 번 적는다.
+        SlangData.all.forEach {
+            if (it.w.any { c -> c.isKanji() })
+                assertTrue("읽기가 가나가 아님: ${it.w} · ${it.read}", kanaOnly.matches(it.read))
+            else
+                assertTrue("읽기가 군더더기: ${it.w} · ${it.read}", it.read.isBlank())
+        }
+    }
+
+    @Test fun `요즘 쓰는 말은 둘 이상이라 다음 말을 고를 수 있다`() {
+        // other()는 지금 뜬 것을 뺀 나머지에서 고른다. 줄이 하나뿐이면 고를 것이
+        // 없어 random()이 그 자리에서 터진다 — 홈 머리를 누르자마자 앱이 죽는다.
+        assertTrue("줄이 둘 미만", SlangData.all.size >= 2)
     }
 }

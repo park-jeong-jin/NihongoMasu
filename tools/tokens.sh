@@ -7,7 +7,12 @@
 set -e
 cd "$(dirname "$0")/.."
 
-JDK=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+# JDK는 그레이들이 쓰는 것과 같은 것을 쓴다. 여기 경로를 또 박아 두면 기기가
+# 바뀌거나 JDK가 올라갈 때 이 파일만 조용히 어긋난다.
+JDK=$(grep -h '^org.gradle.java.home=' gradle.properties "$HOME/.gradle/gradle.properties" \
+  2>/dev/null | tail -1 | cut -d= -f2-)
+[ -n "$JDK" ] || JDK=$(/usr/libexec/java_home -v 21 2>/dev/null || true)
+JAVA=${JDK:+$JDK/bin/}java
 V=0.9.0
 CACHE=tools/.cache
 mkdir -p "$CACHE"
@@ -24,5 +29,5 @@ for a in kuromoji-ipadic kuromoji-core; do
   fi
 done
 
-"$JDK/bin/java" -cp "$CACHE/kuromoji-ipadic-$V.jar:$CACHE/kuromoji-core-$V.jar" \
+"$JAVA" -cp "$CACHE/kuromoji-ipadic-$V.jar:$CACHE/kuromoji-core-$V.jar" \
   tools/Tok.java app/src/main/resources/vocab.tsv app/src/main/resources/tokens.tsv

@@ -30,7 +30,8 @@
 ./gradlew testDebugUnitTest  # 단위 테스트
 ```
 
-JDK 21이 `gradle.properties`의 `org.gradle.java.home`에 못 박혀 있다. `JAVA_HOME`을
+JDK 21이 `~/.gradle/gradle.properties`의 `org.gradle.java.home`에 못 박혀 있다
+(프로젝트 안이 아니라 홈 쪽이다). `JAVA_HOME`을
 건드리지 않는다 — 이 기기 기본 java는 25이고 Gradle 8.9는 22까지만 돈다.
 
 ## 코드

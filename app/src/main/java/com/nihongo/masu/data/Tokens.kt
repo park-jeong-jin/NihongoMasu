@@ -40,19 +40,29 @@ object TokenData {
         VocabData.all.associateBy { it.w }
     }
 
-    fun of(w: Word): List<Tok> = lines[w.w].orEmpty().split(' ')
-        .filter { it.isNotBlank() }
-        .map { part ->
-            // 표면형에 콜론이 들어가는 일은 없다. 뒤 세 칸만 갈라 낸다.
-            val f = part.split(':')
-            val surface = f[0]
-            Tok(
-                surface = surface,
-                base = f.getOrNull(1)?.ifBlank { surface } ?: surface,
-                read = f.getOrNull(2)?.ifBlank { surface } ?: surface,
-                content = !f.getOrNull(3).isNullOrBlank()
-            )
-        }
+    /**
+     * 한 번 끊은 문장은 들고 있는다. 오답 노트 목록은 400줄을 다시 그릴 때마다
+     * [of]를 부르는데, 그때마다 쪼개면 재그리기 한 번에 3,600번을 쪼갠다.
+     * 화면에 한 번 뜬 것만 쌓이므로 [lines]를 미리 다 쪼개는 것과는 다르다.
+     */
+    private val cut = HashMap<String, List<Tok>>()
+
+    fun of(w: Word): List<Tok> = cut.getOrPut(w.w) {
+        lines[w.w].orEmpty().split(' ')
+            .filter { it.isNotBlank() }
+            .map { part ->
+                // 생성기(`tools/Tok.java`)가 `표면형:기본형:읽기:품사` 네 칸을 꼭 맞춰
+                // 낸다. 예문에 콜론이 든 것은 한 줄도 없어 칸이 밀릴 일이 없다.
+                val f = part.split(':')
+                val surface = f[0]
+                Tok(
+                    surface = surface,
+                    base = f.getOrNull(1)?.ifBlank { surface } ?: surface,
+                    read = f.getOrNull(2)?.ifBlank { surface } ?: surface,
+                    content = !f.getOrNull(3).isNullOrBlank()
+                )
+            }
+    }
 
     /**
      * 조각의 한국어 뜻. 붙일 것이 없으면 null이다.
@@ -65,7 +75,7 @@ object TokenData {
      * 태깅되지만 사전에서 찾을 말이 아니라, 그대로 뜻 없이 둔다.
      */
     fun meaningOf(tok: Tok): String? =
-        entryOf(tok)?.mean
+        (byWord[tok.base] ?: byWord[tok.surface])?.mean
             ?: tok.base.singleOrNull()?.takeIf { it.isKanji() }?.let { KanjiData.of(it)?.mean }
 
     /**
@@ -76,8 +86,10 @@ object TokenData {
      * 활용한 내용어 5,433개 중 3,907개(71.9%)가 여기서 잡히고, 안 잡히는 것은
      * 읽기를 아예 안 보여준다. 쓰인 꼴의 읽기는 바로 위 「예문 읽기」 줄에 있다.
      *
-     * 기본형으로 먼저 찾고 쓰인 꼴로 한 번 더 찾는다 — 단어표에 활용형이 표제어로
-     * 오른 것도 있다.
+     * **쓰인 꼴로는 찾지 않는다.** 단어표에 활용형이 표제어로 오른 것이 17개 있는데
+     * (`下さい`·`観`·`楽しみ`·`酔っ払い`…) 그 줄의 읽기는 쓰인 꼴의 읽기라, 기본형
+     * 옆에 붙이면 `下さる · ください`·`観る · かん`이 되어 막으려던 그 짝이 도로 나온다.
+     * 뜻은 쓰인 꼴로 찾아도 맞으므로 [meaningOf]는 두 번 찾는 것을 그대로 둔다.
      */
-    fun entryOf(tok: Tok): Word? = byWord[tok.base] ?: byWord[tok.surface]
+    fun entryOf(tok: Tok): Word? = byWord[tok.base]
 }

@@ -38,12 +38,17 @@ public class Tok {
     public static void main(String[] args) throws Exception {
         Tokenizer tokenizer = new Tokenizer();
         StringBuilder out = new StringBuilder();
-        int sentences = 0, tokens = 0, content = 0;
+        int sentences = 0, tokens = 0, content = 0, bad = 0;
 
         for (String line : Files.readAllLines(Path.of(args[0]), StandardCharsets.UTF_8)) {
             if (line.isBlank()) continue;
             String[] f = line.split("\t");
-            if (f.length < 6) continue;
+            // 조용히 넘기면 그 단어만 tokens.tsv 에서 빠져 화면에서 예문이 사라진다.
+            if (f.length < 6) {
+                System.err.println("칸이 모자란 줄: " + f[0]);
+                bad++;
+                continue;
+            }
 
             List<String> parts = new ArrayList<>();
             for (Token t : tokenizer.tokenize(f[5])) {
@@ -68,5 +73,9 @@ public class Tok {
         Files.write(Path.of(args[1]), out.toString().getBytes(StandardCharsets.UTF_8));
         System.out.printf("문장 %d · 토큰 %d · 내용어 %d → %s%n",
             sentences, tokens, content, args[1]);
+        if (bad > 0) {
+            System.err.printf("버린 줄 %d개 — vocab.tsv 를 고치고 다시 돌린다%n", bad);
+            System.exit(1);
+        }
     }
 }

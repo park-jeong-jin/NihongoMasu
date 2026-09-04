@@ -257,6 +257,16 @@ class Verdict {
         pending = then
     }
 
+    /**
+     * 색을 그 자리에서 걷는다. 판을 새로 깔 때 쓴다 — 색이 떠 있는 동안 판을
+     * 갈아 버리면 [mark]가 「이미 색이 떠 있다」며 물러나, 다음 문제는 채점해도
+     * 색도 흔들림도 안 뜬다.
+     */
+    fun clear() {
+        pending = null
+        _correct.value = null
+    }
+
     internal suspend fun settle() {
         delay(VERDICT_HOLD_MS)
         val go = pending

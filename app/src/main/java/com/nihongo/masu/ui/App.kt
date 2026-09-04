@@ -2,7 +2,6 @@ package com.nihongo.masu.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,6 +11,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -88,6 +90,19 @@ private val Screen.feature: Feature?
         is Screen.Practice -> feature
     }
 
+/**
+ * 이 화면의 ⓘ 설명. null이면 상단 바에 아이콘도 안 뜬다.
+ *
+ * 아이콘을 띄우는 조건과 띄울 내용을 한 자리에 묶어 둔다. 갈라 두면 설명을 붙일
+ * 화면을 하나 더 늘렸을 때 조건만 고치고 내용은 안 고쳐서, 엉뚱한 설명이 조용히 뜬다.
+ */
+private val Screen.explainer: (@Composable (() -> Unit) -> Unit)?
+    get() = when (this) {
+        Screen.Home -> { onDismiss -> SrsExplainer(onDismiss) }
+        Screen.Menu(Feature.CLOZE) -> { onDismiss -> ClozeExplainer(onDismiss) }
+        else -> null
+    }
+
 /** 상단 바에 쓸 이름. 홈만 글자 로고를 쓰므로 비워 둔다. */
 private val Screen.title: String
     get() = when (this) {
@@ -108,6 +123,7 @@ fun App(store: Store, speaker: Speaker) {
 
     val stack = remember { mutableStateListOf<Screen>(Screen.Home) }
     val here = stack.last()
+    val explainer = here.explainer
     val atRoot = stack.size == 1
     val showsDrawerIcon = here !is Screen.Practice
 
@@ -198,7 +214,7 @@ fun App(store: Store, speaker: Speaker) {
 
                     // 한 번 읽으면 되는 설명은 화면에 늘 깔아 두지 않고 여기에 접어
                     // 둔다. 찾는 자리가 화면마다 다르면 안 되므로 ⓘ는 이 한 곳뿐이다.
-                    if (here == Screen.Home || here == Screen.Menu(Feature.CLOZE)) {
+                    if (explainer != null) {
                         IconButton(onClick = { explaining = true }) {
                             Icon(
                                 imageVector = Icons.Filled.Info,
@@ -236,7 +252,7 @@ fun App(store: Store, speaker: Speaker) {
                     Screen.Search -> SearchScreen(store, speaker)
                     // 연습으로 바로 뛰어도 목록이 밑에 깔려 있어야
                     // 뒤로가기와 「목록으로」가 홈이 아니라 목록에 닿는다.
-                    Screen.Home -> HomeScreen(store) { go ->
+                    Screen.Home -> HomeScreen(store, speaker) { go ->
                         if (go is Screen.Practice) stack.add(Screen.Menu(go.feature))
                         stack.add(go)
                     }
@@ -261,10 +277,8 @@ fun App(store: Store, speaker: Speaker) {
             }
         }
 
-        if (explaining) {
-            if (here == Screen.Home) SrsExplainer { explaining = false }
-            else ClozeExplainer { explaining = false }
-        }
+        // 설명을 띄운 채 화면을 옮기면 explainer가 null이 되어 저절로 닫힌다.
+        if (explaining) explainer?.invoke { explaining = false }
     }
 }
 
@@ -326,8 +340,77 @@ private fun DrawerRow(label: String, selected: Boolean, onClick: () -> Unit) {
     )
 }
 
+/**
+ * 홈 첫 카드의 머리 — 요즘 쓰는 말 한 마디.
+ *
+ * 외울 카드가 아니라 앱을 열었을 때 눈에 걸리라고 두는 자리다. 그래서 기록도
+ * 남기지 않고 진도에도 안 들어간다.
+ *
+ * 뽑는 것을 `remember`에만 맡긴 이유는 홈이 다른 화면으로 가면 컴포지션에서
+ * 빠지기 때문이다 — 메뉴를 다녀오면 저절로 다음 말이 뜬다. 화면에 그대로
+ * 머무를 때는 머리를 눌러 넘긴다.
+ */
 @Composable
-fun HomeScreen(store: Store, go: (Screen) -> Unit) {
+private fun SlangHead(speaker: Speaker) {
+    val m = LocalMasu.current
+    var slang by remember { mutableStateOf(SlangData.other()) }
+
+    // 액센트 그라데이션을 깐 카드 머리. 모서리는 부모가 자른다 —
+    // 여기서 또 자르면 카드 아래쪽까지 둥글어진다.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(m.grad))
+            // pressSurface는 바탕을 Color로만 받아 이 그라데이션을 못 태운다.
+            // 누르는 맛은 포기해도 「무엇이 일어나는지」는 읽어 줘야 한다.
+            .clickable(
+                role = Role.Button,
+                onClickLabel = "다음 말 보기"
+            ) { slang = SlangData.other(slang) }
+            .padding(start = 18.dp, top = 16.dp, bottom = 16.dp, end = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                "요즘 쓰는 말",
+                fontSize = 12.sp,
+                color = Color.White.copy(alpha = 0.82f),
+                letterSpacing = 1.sp
+            )
+            Spacer(Modifier.height(6.dp))
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(slang.w, fontFamily = JpFont, fontSize = 30.sp, color = Color.White)
+                // 읽기는 한자가 든 말에만 붙어 있다. 없으면 칸도 두지 않는다.
+                if (slang.read.isNotBlank()) {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        slang.read,
+                        fontFamily = JpFont,
+                        fontSize = 14.sp,
+                        color = Color.White.copy(alpha = 0.82f),
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(slang.mean, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+            Spacer(Modifier.height(3.dp))
+            Text(
+                slang.note,
+                fontSize = 12.sp,
+                lineHeight = 17.sp,
+                color = Color.White.copy(alpha = 0.78f)
+            )
+        }
+        // 한자가 섞인 표기는 엔진이 음훈을 잘못 고를 수 있어 읽기가 있으면 그쪽을 넘긴다.
+        IconButton(onClick = { speaker.speak(slang.read.ifBlank { slang.w }) }) {
+            Icon(Icons.Filled.PlayArrow, "발음 듣기", tint = Color.White)
+        }
+    }
+}
+
+@Composable
+fun HomeScreen(store: Store, speaker: Speaker, go: (Screen) -> Unit) {
     val m = LocalMasu.current
 
     // 가나를 복습에서 뺐어도 타일은 그대로 있다. 그래서 여기서는 설정을 보지 않고
@@ -345,9 +428,6 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     val kanaStages = store.countStages(kanaIds)
 
     ScreenColumn {
-        // 밀린 복습 수는 이 앱에서 가장 먼저 봐야 할 숫자다. 그라데이션 머리에
-        // 홀로 얹어 시선이 딴 데로 새지 않게 한다.
-        val shownDue by animateIntAsState(due, tween(700), label = "dueCount")
         Column(
             Modifier
                 .fillMaxWidth()
@@ -356,31 +436,10 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
                 .background(m.card)
                 .border(1.dp, m.rule, RoundedCornerShape(18.dp))
         ) {
-            // 액센트 그라데이션을 깐 카드 머리. 모서리는 부모가 자른다 —
-            // 여기서 또 자르면 카드 아래쪽까지 둥글어진다.
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(Brush.verticalGradient(m.grad))
-                    .padding(18.dp)
-            ) {
-                Text(
-                    "오늘 복습할 카드",
-                    fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.82f),
-                    letterSpacing = 1.sp
-                )
-                Row(verticalAlignment = Alignment.Bottom) {
-                    Text("$shownDue", fontFamily = JpFont, fontSize = 54.sp, color = Color.White)
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        "장",
-                        fontSize = 15.sp,
-                        color = Color.White.copy(alpha = 0.82f),
-                        modifier = Modifier.padding(bottom = 9.dp)
-                    )
-                }
-            }
+            // 밀린 복습 수가 머리에 크게, 바로 아래 단추에, 드로어 밑에까지 세 번
+            // 나와 있었다. 한 카드 안에서 두 번은 셋 중 하나가 남으면 될 일이라,
+            // 제일 눈에 띄는 이 자리는 매번 달라지는 것에 내준다.
+            SlangHead(speaker)
 
             Column(Modifier.padding(16.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {

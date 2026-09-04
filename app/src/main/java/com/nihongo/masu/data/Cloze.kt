@@ -38,8 +38,17 @@ object Cloze {
      * [readable]까지 요구하는 이유는 「읽기 보기」가 정답을 흘리지 않아야 하기
      * 때문이다 — 아래를 보라.
      */
-    fun pool(level: Jlpt): List<Word> =
-        VocabData.of(level, VocabData.ALL_TAGS).filter { it.w in it.ex && readable(it) }
+    fun pool(level: Jlpt): List<Word> = pools.getValue(level)
+
+    /**
+     * 등급마다 한 번만 걸러 둔다. 홈 타일이 [total]을 읽느라 켜자마자 어차피 네
+     * 등급을 다 훑는데, 판을 깔 때마다 또 훑을 이유가 없다.
+     */
+    private val pools: Map<Jlpt, List<Word>> by lazy {
+        Jlpt.entries.associateWith { level ->
+            VocabData.of(level, VocabData.ALL_TAGS).filter { it.w in it.ex && readable(it) }
+        }
+    }
 
     /**
      * 예문 읽기에서도 표제어를 가릴 수 있는 단어인가.
@@ -74,5 +83,5 @@ object Cloze {
     fun blankRead(w: Word): String = w.exRead.replace(w.read, BLANK)
 
     /** 네 등급을 통틀어 쓸 수 있는 단어 수. 홈 타일이 통 크기를 적는다. */
-    val total: Int by lazy { Jlpt.entries.sumOf { pool(it).size } }
+    val total: Int by lazy { pools.values.sumOf { it.size } }
 }
