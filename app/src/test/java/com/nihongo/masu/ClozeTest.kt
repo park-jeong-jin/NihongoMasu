@@ -25,11 +25,11 @@ class ClozeTest {
     }
 
     @Test fun `통 크기가 유지된다`() {
-        assertEquals(596, Cloze.pool(Jlpt.N5).size)
-        assertEquals(506, Cloze.pool(Jlpt.N4).size)
-        assertEquals(1730, Cloze.pool(Jlpt.N3).size)
-        assertEquals(1499, Cloze.pool(Jlpt.N2).size)
-        assertEquals(4331, Cloze.total)
+        assertEquals(585, Cloze.pool(Jlpt.N5).size)
+        assertEquals(480, Cloze.pool(Jlpt.N4).size)
+        assertEquals(1699, Cloze.pool(Jlpt.N3).size)
+        assertEquals(1489, Cloze.pool(Jlpt.N2).size)
+        assertEquals(4253, Cloze.total)
     }
 
     @Test fun `빈칸을 치면 문장에 표기가 남지 않는다`() {
@@ -55,6 +55,29 @@ class ClozeTest {
     @Test fun `표기가 두 번 나오면 두 자리가 다 가려진다`() {
         val w = VocabData.all.first { it.w == "歌" }
         assertEquals("あなたに${Cloze.BLANK}を${Cloze.BLANK}ってほしいです。", Cloze.blank(w))
+    }
+
+    @Test fun `읽기 보기가 정답의 읽기를 흘리지 않는다`() {
+        Jlpt.entries.forEach { level ->
+            Cloze.pool(level).forEach { w ->
+                assertFalse("${w.w}(${w.read}) · ${Cloze.blankRead(w)}", w.read in Cloze.blankRead(w))
+            }
+        }
+    }
+
+    @Test fun `읽기 보기는 빈칸을 문장과 같은 수로 남긴다`() {
+        val w = VocabData.all.first { it.w == "友達" }
+        assertEquals("${Cloze.BLANK}とえいがをみます。", Cloze.blankRead(w))
+        // 표기가 두 번 나오는 단어는 읽기도 두 자리가 가려진다
+        val twice = VocabData.all.first { it.w == "歌" }
+        assertEquals("あなたに${Cloze.BLANK}を${Cloze.BLANK}ってほしいです。", Cloze.blankRead(twice))
+    }
+
+    @Test fun `읽기가 문장 다른 자리에도 걸리는 단어는 통에서 빠진다`() {
+        // 木(き)의 예문 읽기 「こうえんにおおきいきがあります」를 き로 가리면
+        // 「おお＿＿＿い＿＿＿」가 된다. 이런 단어는 아예 안 낸다.
+        val tree = VocabData.all.first { it.w == "木" && it.read == "き" }
+        assertFalse(tree.id in Jlpt.entries.flatMap { Cloze.pool(it) }.map { it.id }.toSet())
     }
 
     @Test fun `통은 표기가 통째로 든 예문만 담는다`() {

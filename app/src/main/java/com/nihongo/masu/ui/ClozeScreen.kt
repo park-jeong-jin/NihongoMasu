@@ -56,7 +56,10 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
     /** 고른 보기. null이면 아직 안 골랐다 — 이 값 하나가 문제면/정답면을 가른다. */
     var picked by remember { mutableStateOf<Word?>(null) }
 
-    /** 막혔을 때 여는 문. 예문 한국어 뜻은 답을 거의 드러내므로 기본은 감춤이다. */
+    /**
+     * 막혔을 때 여는 문. 문장을 가나로 풀어 준다 — 한국어 뜻은 그대로 정답이라
+     * 채점 전에 보여줄 수 없고, 뜻은 채점하면 정답면에 어차피 뜬다.
+     */
     var hinted by remember { mutableStateOf(false) }
 
     val verdict = rememberVerdict()
@@ -146,16 +149,20 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
             if (picked == null) {
                 Spacer(Modifier.height(16.dp))
                 if (hinted) {
+                    // 빈칸은 여기서도 빈칸이다. 가나로 풀어 주는 것은 나머지 글자다.
+                    // JpText를 안 쓰는 이유는 색이 먹색으로 고정이라 도움말이 문제만큼
+                    // 진해지기 때문이다.
                     Text(
-                        word.exMean,
-                        fontSize = 14.sp,
+                        Cloze.blankRead(word),
+                        fontFamily = JpFont,
+                        fontSize = 18.sp,
+                        lineHeight = 27.sp,
                         color = m.sumi2,
                         textAlign = TextAlign.Center,
-                        lineHeight = 21.sp,
                         modifier = Modifier.padding(horizontal = 14.dp)
                     )
                 } else {
-                    Chip("문장 뜻 보기") { hinted = true }
+                    Chip("읽기 보기") { hinted = true }
                 }
             } else {
                 Spacer(Modifier.height(18.dp))
@@ -262,8 +269,9 @@ fun ClozeExplainer(onDismiss: () -> Unit) {
                         "이 판은 복습 기록에 남지 않으니 틀려도 잃는 것이 없고, " +
                         "채점하면 고르지 않은 보기의 뜻도 함께 보여줍니다. " +
                         "한 문제에 비슷한 말 네 개를 나란히 보는 것이 이 판의 값어치입니다.\n\n" +
-                        "문장이 안 읽히면 「문장 뜻 보기」로 한국어 뜻을 볼 수 있습니다 — " +
-                        "답이 거의 드러나므로 처음에는 감춰 둡니다.",
+                        "한자가 안 읽혀서 막히면 「읽기 보기」로 문장을 가나로 풀어 봅니다. " +
+                        "빈칸은 그대로 남습니다 — 한국어 뜻은 그대로 정답이라 채점 전에는 " +
+                        "보여주지 않고, 채점하면 정답면에 나옵니다.",
                     fontSize = 13.sp,
                     color = m.sumi2,
                     lineHeight = 21.sp

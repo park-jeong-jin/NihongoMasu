@@ -34,9 +34,26 @@ object Cloze {
      * 떼기 때문에, 어간만 가리면 남은 글자가 빈칸 밖으로 샌다 —
      * `友達` → `＿＿＿達と映画を見ます`. 등급마다 500장이 넘어 활용형 400여 개를
      * 빼도 한 판([ROUND]장)에는 넘친다.
+     *
+     * [readable]까지 요구하는 이유는 「읽기 보기」가 정답을 흘리지 않아야 하기
+     * 때문이다 — 아래를 보라.
      */
     fun pool(level: Jlpt): List<Word> =
-        VocabData.of(level, VocabData.ALL_TAGS).filter { it.w in it.ex }
+        VocabData.of(level, VocabData.ALL_TAGS).filter { it.w in it.ex && readable(it) }
+
+    /**
+     * 예문 읽기에서도 표제어를 가릴 수 있는 단어인가.
+     *
+     * 나오는 횟수까지 같아야 한다. 읽기가 짧으면 문장 다른 데서 또 걸려서, 다
+     * 가리면 엉뚱한 자리가 뚫린다 — `木`(き)의 예문 읽기
+     * `こうえんにおおきいきがあります`를 `き`로 가리면 `おお＿＿＿い＿＿＿`가 된다.
+     * 이 조건에 걸려 빠지는 것은 78개뿐이다.
+     */
+    private fun readable(w: Word): Boolean =
+        w.read in w.exRead && w.exRead.occurrences(w.read) == w.ex.occurrences(w.w)
+
+    /** 겹치지 않게 센 [sub]의 개수. */
+    private fun String.occurrences(sub: String): Int = split(sub).size - 1
 
     /**
      * 예문에서 표기를 [BLANK]로 갈아 낀다.
@@ -45,6 +62,16 @@ object Cloze {
      * 자리가 다 가려진다. 한 자리만 남기면 남은 쪽이 그대로 정답이 된다.
      */
     fun blank(w: Word): String = w.ex.replace(w.w, BLANK)
+
+    /**
+     * 예문 읽기에서 표제어의 읽기를 [BLANK]로 갈아 낀다.
+     *
+     * 막혔을 때 여는 문이다. 한자가 안 읽혀서 문장을 못 읽는 것과 답을 모르는 것은
+     * 다른 문제인데, 앞의 것 때문에 막힌 사람에게 뜻을 보여주면 답까지 준다 —
+     * `＿＿＿と映画を見ます`의 뜻 「친구와 영화를 봅니다」는 그대로 정답이다.
+     * 읽기는 나머지 글자만 풀어 주고 빈칸은 빈칸으로 남긴다.
+     */
+    fun blankRead(w: Word): String = w.exRead.replace(w.read, BLANK)
 
     /** 네 등급을 통틀어 쓸 수 있는 단어 수. 홈 타일이 통 크기를 적는다. */
     val total: Int by lazy { Jlpt.entries.sumOf { pool(it).size } }
