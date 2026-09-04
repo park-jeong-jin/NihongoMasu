@@ -51,6 +51,7 @@ enum class Feature(val label: String) {
     KANA("가나 맞추기"),
     KANJI("한자 맞추기"),
     SELF("단어 맞추기"),
+    CLOZE("문장 맞추기"),
     SPEED("스피드"),
     REVIEW("오답 노트")
 }
@@ -195,13 +196,13 @@ fun App(store: Store, speaker: Speaker) {
                     }
                     Spacer(Modifier.weight(1f))
 
-                    // 복습 방식 설명. 한 번 읽으면 되는 내용이라 홈에 늘 깔아 두지 않고
-                    // 여기에 접어 둔다.
-                    if (here == Screen.Home) {
+                    // 한 번 읽으면 되는 설명은 화면에 늘 깔아 두지 않고 여기에 접어
+                    // 둔다. 찾는 자리가 화면마다 다르면 안 되므로 ⓘ는 이 한 곳뿐이다.
+                    if (here == Screen.Home || here == Screen.Menu(Feature.CLOZE)) {
                         IconButton(onClick = { explaining = true }) {
                             Icon(
                                 imageVector = Icons.Filled.Info,
-                                contentDescription = "복습 방식 설명",
+                                contentDescription = "설명 보기",
                                 tint = m.sumi3
                             )
                         }
@@ -248,6 +249,9 @@ fun App(store: Store, speaker: Speaker) {
                                 WordQuizFlow(store, speaker, CardKind.WORD, practicing, open) { pop() }
                             Feature.KANJI ->
                                 WordQuizFlow(store, speaker, CardKind.KANJI, practicing, open) { pop() }
+                            // 범위 고르기 단계가 없어 practicing·open을 안 쓴다 —
+                            // 등급은 화면 안 세그먼트다.
+                            Feature.CLOZE -> ClozeScreen(speaker) { pop() }
                             Feature.SPEED -> SpeedFlow(store, practicing, open) { pop() }
                             Feature.REVIEW -> ReviewFlow(store, speaker, practicing, open) { pop() }
                         }
@@ -258,7 +262,8 @@ fun App(store: Store, speaker: Speaker) {
         }
 
         if (explaining) {
-            SrsExplainer { explaining = false }
+            if (here == Screen.Home) SrsExplainer { explaining = false }
+            else ClozeExplainer { explaining = false }
         }
     }
 }
@@ -430,6 +435,13 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
                 Feature.SELF, "일→한·한→일로 묻습니다.",
                 "단어 ${VocabData.all.size}",
                 store.countStages(wordIds), wordIds.size, m.gold
+            ),
+            // 복습 기록을 안 남기니 막대의 분모가 없다. 스피드 타일이 최고점을
+            // 적는 자리에 여기는 통 크기를 적는다.
+            Tile(
+                Feature.CLOZE, "예문의 빈칸을 넷 중에서.",
+                "예문 ${Cloze.total}개에서 뽑습니다",
+                null, 0, m.sora
             ),
             Tile(
                 Feature.SPEED, "1분에 몇 장을 넘기는지.",

@@ -267,7 +267,7 @@ class Verdict {
 }
 
 @Composable
-private fun rememberVerdict(): Verdict {
+fun rememberVerdict(): Verdict {
     val v = remember { Verdict() }
     LaunchedEffect(v.tick) {
         if (v.tick > 0) v.settle()

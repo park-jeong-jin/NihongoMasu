@@ -45,6 +45,12 @@ data class MasuColors(
     val gold: Color,
     val murasaki: Color,
     /**
+     * 「문장 맞추기」의 액센트. 홈 타일은 색으로 기능을 알아보게 하므로
+     * 여섯째 기능은 색도 여섯째가 필요하다. 나머지 다섯과 같이 글자로도
+     * 쓸 수 있게 카드·종이 양쪽에 대해 명암비 4.5:1을 넘겨 잡았다.
+     */
+    val sora: Color,
+    /**
      * 카드 헤더에 까는 액센트 그라데이션. 위에서 아래로.
      * 흰 글씨를 얹으므로 밝은 쪽 끝도 명암비 4.5:1을 넘겨 둔다.
      */
@@ -59,7 +65,7 @@ val LightMasu = MasuColors(
     shu = Color(0xFFD32F4A), shuSoft = Color(0xFFFFF4F6),
     ai = Color(0xFF3B5BDB), aiSoft = Color(0xFFE7EDFF),
     ok = Color(0xFF0B815A), okSoft = Color(0xFFEAFBF3),
-    gold = Color(0xFFB45309), murasaki = Color(0xFF6D28D9),
+    gold = Color(0xFFB45309), murasaki = Color(0xFF6D28D9), sora = Color(0xFF0E7490),
     grad = listOf(Color(0xFF2F4BC9), Color(0xFF4A66DD)),
     dark = false
 )
@@ -71,7 +77,7 @@ val DarkMasu = MasuColors(
     shu = Color(0xFFFF7A8C), shuSoft = Color(0xFF2C1824),
     ai = Color(0xFF7C9BFF), aiSoft = Color(0xFF1E2743),
     ok = Color(0xFF4ADE80), okSoft = Color(0xFF10261A),
-    gold = Color(0xFFFBBF24), murasaki = Color(0xFFC4B5FD),
+    gold = Color(0xFFFBBF24), murasaki = Color(0xFFC4B5FD), sora = Color(0xFF67E8F9),
     grad = listOf(Color(0xFF243566), Color(0xFF33478A)),
     dark = true
 )
