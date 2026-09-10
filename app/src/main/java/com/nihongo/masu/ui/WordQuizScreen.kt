@@ -1,9 +1,13 @@
 package com.nihongo.masu.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -79,7 +83,10 @@ fun WordQuizFlow(
     }
 
     if (practicing) {
-        WordQuizScreen(store, speaker, level, kind, tag, dir, onClose)
+        // 보기는 채점을 안 하므로 화면이 통째로 다르다. 같은 화면에 조건을 흩뿌리는
+        // 것보다 갈라 두는 편이 짧다 — 겹치는 것은 정답면뿐이고 그건 이미 부품이다.
+        if (dir == Ask.VIEW) ViewScreen(store, speaker, level, kind, tag)
+        else WordQuizScreen(store, speaker, level, kind, tag, dir, onClose)
     } else {
         WordScopeMenu(store, kind, level, { level = it }) { t ->
             val fixed = store.settings.ask
@@ -123,8 +130,12 @@ private fun WordScopeMenu(
         )
         Spacer(Modifier.height(10.dp))
         Text(
-            if (fixed == null) "떠올려 볼 범위를 고르세요. 누르면 무엇을 물을지 고릅니다."
-            else "떠올려 볼 범위를 고르세요. 묻는 방향은 「${fixed.label}」입니다 — 설정에서 바꿉니다.",
+            when (fixed) {
+                null -> "범위를 고르세요. 누르면 무엇을 물을지 고릅니다 — 「보기」로 그냥 훑어볼 수도 있습니다."
+                // 「보기」는 물음이 아니라서 「묻는 방향은 보기입니다」가 말이 안 된다.
+                Ask.VIEW -> "범위를 고르세요. 묻지 않고 넘겨 보는 「보기」입니다 — 설정에서 바꿉니다."
+                else -> "떠올려 볼 범위를 고르세요. 묻는 방향은 「${fixed.label}」입니다 — 설정에서 바꿉니다."
+            },
             fontSize = 13.sp,
             color = m.sumi3
         )
@@ -158,6 +169,14 @@ private fun WordScopeMenu(
             }
         }
     }
+}
+
+/** 질문면 글자 크기. 긴 표기가 카드 밖으로 나가지 않게 길이로 단을 내린다. */
+private fun promptSize(text: String): Int = when {
+    text.length > 12 -> 22
+    text.length > 4 -> 34
+    text.length > 2 -> 46
+    else -> 64
 }
 
 /** 단어 한 장을 고른 방향으로 뒤집는다. [Ask.MIX]는 여기 오지 않는다 — [Ask.faces]가 갈라 준다. */
@@ -218,7 +237,35 @@ private fun WordQuizScreen(
     val card = session.card
     var confirmReset by remember { mutableStateOf(false) }
 
-    ScreenColumn {
+    fun answer(rating: Rating) =
+        // 되돌리면 정답을 펼친 자리로 돌아온다.
+        session.grade(rating, restore = { revealed = true }) { revealed = false }
+
+    // 채점 단추는 스크롤 밖에 못 박는다. 예문 길이와 이어보기 칩 수에 눌러 본 풀이
+    // 카드까지 얹혀 카드 높이가 장마다 다른데, 스크롤 안에 두면 한 장 채점할 때마다
+    // 단추가 손가락 밑에서 위아래로 도망간다. 연달아 채점하는 화면이라 더 그렇다.
+    ScreenColumn(header = {
+        // 진행 막대와 되돌리기는 카드가 길어도 늘 보여야 한다.
+        if (!session.done && card != null) {
+            QuizHeader(
+                session,
+                "${level.label} " + if (kind == CardKind.KANJI) "한자" else tag
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+    }, pinned = {
+        // 판이 끝났거나 낼 카드가 없으면 채점할 것이 없다.
+        if (!session.done && card != null) {
+            Spacer(Modifier.height(12.dp))
+            if (!revealed) {
+                PrimaryButton("정답 확인", { revealed = true }, Modifier.fillMaxWidth())
+            } else {
+                Text("얼마나 잘 떠올렸는지 골라 주세요", fontSize = 12.sp, color = m.sumi3)
+                Spacer(Modifier.height(8.dp))
+                RatingRow { answer(it) }
+            }
+        }
+    }) {
         if (session.done) {
             CycleDone(session, onClose) { rebuild() }
             return@ScreenColumn
@@ -229,37 +276,24 @@ private fun WordQuizScreen(
             return@ScreenColumn
         }
 
-        fun answer(rating: Rating) =
-            // 되돌리면 정답을 펼친 자리로 돌아온다.
-            session.grade(rating, restore = { revealed = true }) { revealed = false }
-
-        QuizHeader(
-            session,
-            "${level.label} " + if (kind == CardKind.KANJI) "한자" else tag
-        )
-
-        Spacer(Modifier.height(24.dp))
+        // 눌러 본 풀이는 카드 아래에 따로 선다. 정답면을 접으면 같이 놓는다 —
+        // 안 그러면 문제만 보이는 카드 밑에 답이 남는다.
+        val peek = rememberPeek(card, revealed)
 
         // 앞면 — 고른 방향에 따라 일본어 표기이거나 한국어 뜻이다
         QuizCard(verdict) {
-            val promptSize = when {
-                card.prompt.length > 12 -> 22
-                card.prompt.length > 4 -> 34
-                card.prompt.length > 2 -> 46
-                else -> 64
-            }
             // 한→일의 질문면은 한국어 뜻이다. JpText는 일본어 서체를 물려서
             // 한글이 대체 글꼴로 떨어진다.
             if (card.korean) {
                 Text(
                     card.prompt,
-                    fontSize = promptSize.sp,
+                    fontSize = promptSize(card.prompt).sp,
                     fontWeight = FontWeight.Bold,
                     color = m.sumi,
                     textAlign = TextAlign.Center
                 )
             } else {
-                JpText(card.prompt, promptSize)
+                JpText(card.prompt, promptSize(card.prompt))
             }
 
             if (revealed) {
@@ -281,27 +315,20 @@ private fun WordQuizScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                 }
-                AnswerFace(card.says, card.link, speaker)
+                AnswerFace(card.says, card.link, speaker, peek)
             } else {
                 Spacer(Modifier.height(20.dp))
                 Text(card.hint, fontSize = 13.sp, color = m.sumi3, textAlign = TextAlign.Center)
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        PeekCard(peek.value) { speaker.speak(it) }
 
-        if (!revealed) {
-            PrimaryButton("정답 확인", { revealed = true }, Modifier.fillMaxWidth())
-        } else {
+        // 초기화는 못 박지 않는다. 한 판에 한 번 쓸까 말까 한 것이 채점 단추와
+        // 나란히 붙어 있으면 잘못 누르기만 좋다.
+        if (revealed) {
+            Spacer(Modifier.height(16.dp))
             GhostButton("이 카드 초기화", { confirmReset = true }, Modifier.fillMaxWidth())
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "얼마나 잘 떠올렸는지 골라 주세요",
-                fontSize = 12.sp,
-                color = m.sumi3
-            )
-            Spacer(Modifier.height(8.dp))
-            RatingRow { answer(it) }
         }
 
         RecLine(store.get(card.id))
@@ -316,5 +343,139 @@ private fun WordQuizScreen(
             onConfirm = { store.reset(card.id) },
             onDismiss = { confirmReset = false }
         )
+    }
+}
+
+/**
+ * 보기 — 채점 없이 정답면만 넘긴다.
+ *
+ * 맞추기가 「떠올린 뒤 채점」이라면 여기는 그냥 읽는 자리다. [Store]를 안 받는 것이
+ * 그 뜻이다 — 안 남기기로 정한 게 아니라 남길 손이 아예 없다. 문장 맞추기와 같은 결이다.
+ *
+ * 표 순서 그대로 내고 안 섞는다. 섞으면 「어디까지 봤나」가 몇 번째인지로 안 남아서,
+ * 훑다 나갔다 들어오면 본 것을 또 보고 못 본 것은 계속 안 나온다. 대신 그 자리를
+ * 저장하지는 않는다 — 매번 1부터다.
+ *
+ * 방향은 [Ask.SHOW] 하나뿐이다. 한→일은 답을 가려 두는 것이 일인데 여기는
+ * 가릴 것이 없어서, 뒤집어 봐야 같은 카드가 순서만 바뀌어 나온다.
+ */
+@Composable
+private fun ViewScreen(
+    store: Store,
+    speaker: Speaker,
+    level: Level,
+    kind: CardKind,
+    tag: String
+) {
+    val m = LocalMasu.current
+    val cards = remember(kind, level, tag) {
+        when (kind) {
+            CardKind.WORD -> VocabData.of(level, tag).map { faceOf(it, Ask.SHOW) }
+            CardKind.KANJI -> KanjiData.of(level).map { faceOf(it, Ask.SHOW) }
+        }
+    }
+    var i by remember(kind, level, tag) { mutableStateOf(0) }
+
+    if (cards.isEmpty()) {
+        ScreenColumn { EmptyNote("이 범위에는 볼 카드가 없습니다.") }
+        return
+    }
+
+    // 범위가 바뀌는 순간 자리를 되돌리기 전에 그려지면 옛 자리가 새 목록 밖일 수 있다.
+    val card = cards[i.coerceIn(0, cards.lastIndex)]
+    val scope = "${level.label} " + if (kind == CardKind.KANJI) "한자" else tag
+
+    // 단추는 스크롤 밖에 못 박는다. 예문 길이와 이어보기 칩 수 때문에 카드 높이가
+    // 장마다 달라서, 안에 두면 한 장 넘길 때마다 「다음」이 손가락 밑에서 도망간다.
+    ScreenColumn(header = {
+        Column(Modifier.fillMaxWidth()) {
+            Text("$scope · 보기 · ${i + 1} / ${cards.size}", fontSize = 12.sp, color = m.sumi3)
+            Spacer(Modifier.height(6.dp))
+            ProgressBar((i + 1).toFloat() / cards.size)
+        }
+        Spacer(Modifier.height(24.dp))
+    }, pinned = {
+        Spacer(Modifier.height(12.dp))
+        ScoreRow(store.get(card.id)?.score) { store.setScore(card.id, it) }
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GhostButton("\u25C0 이전", { i-- }, Modifier.weight(1f), enabled = i > 0)
+            // 끝에서는 「다음」 자리가 「처음부터」가 된다. 단추를 하나 더 두면 셋이
+            // 나란히 서서 글자가 잘린다. 범위로 나가는 길은 뒤로가기가 이미 맡는다.
+            if (i < cards.lastIndex) {
+                PrimaryButton("다음 \u25B6", { i++ }, Modifier.weight(1f))
+            } else {
+                PrimaryButton("처음부터", { i = 0 }, Modifier.weight(1f))
+            }
+        }
+    }) {
+        val peek = rememberPeek(card)
+
+        MasuCard {
+            Column(
+                Modifier.fillMaxWidth().padding(vertical = 20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                JpText(card.prompt, promptSize(card.prompt))
+                Spacer(Modifier.height(20.dp))
+                AnswerDivider()
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    card.meaning,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = m.sumi,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.height(12.dp))
+                // 맞추기 정답면과 같은 줄들이다. 읽기·예문이 줄마다 따로 소리 나고
+                // 이어보기 칩도 그대로 붙는다.
+                AnswerFace(card.says, card.link, speaker, peek)
+            }
+        }
+
+        PeekCard(peek.value) { speaker.speak(it) }
+    }
+}
+
+/**
+ * 점수를 0~[Srs.MASTERED_AT]에서 직접 고르는 줄.
+ *
+ * [score]가 null이면 아무 칸도 안 켜진다. 「아직 안 튼 카드」와 「0점을 준 카드」는
+ * 눈으로 갈려야 한다 — 0을 켜 두면 손도 안 댄 단어가 전부 0점을 받은 것처럼 보인다.
+ *
+ * 열한 칸이라 칸 하나가 손가락보다 좁다. 대신 세로를 키워 자판 한 줄만 한 크기로
+ * 맞춘다 — 두 줄로 접으면 못 박힌 자리가 그만큼 자라 카드가 밀린다.
+ */
+@Composable
+private fun ScoreRow(score: Int?, onPick: (Int) -> Unit) {
+    val m = LocalMasu.current
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        (0..Srs.MASTERED_AT).forEach { n ->
+            val on = n == score
+            Box(
+                Modifier
+                    .weight(1f)
+                    .pressSurface(
+                        RoundedCornerShape(8.dp),
+                        if (on) m.ai else m.card,
+                        BorderStroke(1.dp, if (on) m.ai else m.rule),
+                        onClickLabel = "${n}점 주기"
+                    ) { onPick(n) }
+                    .padding(vertical = 13.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    "$n",
+                    fontSize = 12.sp,
+                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+                    color = when {
+                        on && m.dark -> Color(0xFF0F1114)
+                        on -> Color.White
+                        else -> m.sumi2
+                    }
+                )
+            }
+        }
     }
 }

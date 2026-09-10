@@ -5,7 +5,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,13 +39,7 @@ fun SearchScreen(store: Store, speaker: Speaker) {
             placeholder = { Text("環境, かんきょう, 환경") },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             modifier = Modifier.fillMaxWidth(),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = m.ai,
-                unfocusedBorderColor = m.rule,
-                focusedTextColor = m.sumi,
-                unfocusedTextColor = m.sumi,
-                cursorColor = m.ai
-            )
+            colors = masuFieldColors()
         )
 
         if (q.isBlank()) {
@@ -87,7 +80,7 @@ fun SearchScreen(store: Store, speaker: Speaker) {
                 )
                 if (rec != null) {
                     Text(
-                        if (Srs.isMastered(rec)) "익힘" else "${rec.box}단계",
+                        if (Srs.isMastered(rec)) "익힘" else "${rec.score}점",
                         fontSize = 11.sp,
                         color = if (Srs.isMastered(rec)) m.ok else m.sumi3
                     )

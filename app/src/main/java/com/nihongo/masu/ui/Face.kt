@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +17,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,25 +61,29 @@ data class Say(
      * 끊어 둔 예문. 있으면 [text] 위에 눌러 볼 수 있는 일본어 줄이 서고,
      * [text]에는 읽기와 뜻만 담는다 — 일본어 줄을 두 군데서 그리지 않는다.
      */
-    val tokens: List<Tok>? = null,
-    /**
-     * 어느 카드의 줄인가. 눌러 둔 조각을 카드가 바뀔 때 놓는 데 쓴다.
-     *
-     * 내용으로 견주면 예문이 같은 카드끼리 안 갈린다 — 문장 맞추기 통에서만
-     * 예문을 나눠 쓰는 단어가 102쌍이라, 그 둘이 잇달아 나오면 안 누른 조각이
-     * 펼쳐진 채로 넘어온다.
-     */
-    val key: String = text
+    val tokens: List<Tok>? = null
 )
 
-/** 정답면에서 이어지는 다른 카드 한 칸. */
-data class Link(val label: String, val speak: String)
+/**
+ * 정답면에서 이어지는 다른 카드 한 칸.
+ *
+ * [says]가 있으면 눌러서 카드 아래 [PeekCard]로 펴고, 없으면 [speak]를 읽어 준다.
+ * 갈리는 것은 낱자에 소리 하나를 붙일 수 없어서다 — 한자는 음독도 훈독도 여럿이라
+ * 하나를 골라 읽어 주면 고르지 않은 쪽은 없는 것이 된다. 단어는 읽기가 하나라
+ * 그쪽은 눌러서 소리가 나는 것이 맞다.
+ */
+data class Link(
+    val label: String,
+    val speak: String = "",
+    val says: List<Say> = emptyList()
+)
 
 /**
  * 정답면 맨 아래 이어보기 줄. 한자에는 그 글자가 든 단어를, 단어에는 표기에 든
  * 한자를 붙인다. 낱자로 외우면 실제로 만나는 말과 이어지지 않는다.
  *
- * 눌러도 그 카드로 건너가지 않는다 — 돌던 묶음이 날아간다. 소리만 들려준다.
+ * 눌러도 그 카드로 건너가지 않는다 — 돌던 묶음이 날아간다. 소리를 내거나,
+ * 카드 아래에 따로 한 장을 세워 보여준다.
  */
 data class LinkLine(val label: String, val items: List<Link>)
 
@@ -89,13 +95,13 @@ private fun sayable(s: String) =
     if (s == "—") "" else s.replace("(", "").replace(")", "").replace("・", "、")
 
 /**
- * 끊어 둔 줄이 없는 단어는 없다 — `TokensTest`가 5,171개 전부에 대고 확인한다.
+ * 끊어 둔 줄이 없는 단어는 없다 — `TokensTest`가 5,429개 전부에 대고 확인한다.
  * 그래서 예문을 본문에 도로 넣는 대비를 두지 않는다. 두면 테스트가 막아 둔 상태를
  * 위한 코드가 되어, 둘 중 하나는 거짓말이 된다.
  */
 fun saysOf(w: Word): List<Say> = listOf(
     Say("읽기", w.read),
-    Say("예문", "${w.exRead}\n${w.exMean}", w.exRead, TokenData.of(w), w.id)
+    Say("예문", "${w.exRead}\n${w.exMean}", w.exRead, TokenData.of(w))
 )
 
 /**
@@ -116,16 +122,13 @@ fun saysOf(kana: Kana, script: Script): List<Say> =
 /**
  * 표기에 든 한자. 히라가나뿐인 단어는 빈 줄이 되어 뜨지 않는다.
  *
- * 읽어 주는 것은 음독 첫 갈래다. 음독이 없는 글자(둘 있다)는 훈독으로 읽는다 —
- * 아무 소리도 안 나는 칩이 있으면 눌러도 되는 것인지 알 수가 없다.
+ * 칩을 누르면 그 글자의 뒷면이 [saysOf]로 카드 아래에 선다. 같은 한자의 뒷면은
+ * 한자 카드에서 보든 단어 카드에서 보든 같아야 해서 그쪽 것을 그대로 쓴다.
  */
 fun linksOf(w: Word): LinkLine? = w.w.toSet()
     .filter { it.isKanji() }
     .mapNotNull { KanjiData.of(it) }
-    .map {
-        val read = sayable(it.on).ifBlank { sayable(it.kun) }
-        Link("${it.c} ${it.mean}", read.substringBefore('、'))
-    }
+    .map { Link("${it.c} ${it.mean}", says = saysOf(it)) }
     .ifEmpty { null }
     ?.let { LinkLine("든 한자", it) }
 
@@ -142,30 +145,87 @@ fun linksOf(k: Kanji, limit: Int = 6): LinkLine? = VocabData.withKanji(k.c.first
     .ifEmpty { null }
     ?.let { LinkLine("든 단어", it) }
 
-/** 정답면 아래쪽 — 읽기 줄들과 이어보기 한 줄. */
+/**
+ * 눌러 본 것 한 장. 카드 **밖**으로 나가 아래에 따로 선다.
+ *
+ * 카드 안에 펴 넣으면 카드 본문이 다시 흐른다 — 이어보기 칩은 줄바꿈으로 담기라
+ * 한 칸만 늘어도 줄 수가 바뀌어서, 조각을 옮겨 누를 때마다 방금 누른 것까지 움직인다.
+ * 게다가 테두리가 없어 어디까지가 풀이인지 안 보인다. 그렇다고 창으로 띄우면 방금
+ * 누른 것을 가려 견줄 것이 사라진다.
+ *
+ * 아래에 한 장 더 세우면 위는 그대로 있고, 테두리로 갈린다. 아래 단추들은 여전히
+ * 카드 높이만큼 밀리지만 **한 번만** 밀린다 — 다른 줄을 눌러도 카드가 갈릴 뿐
+ * 높이가 크게 안 바뀌어서, 누르던 자리가 손가락 밑에 남는다.
+ *
+ * @param row 어느 줄에서 눌렀나. 줄 이름표를 그대로 쓴다 — 한 카드 안에서 안 겹친다.
+ *            한 카드에 한 자리만 켜지므로 예문 조각을 누르면 든 한자 칩의 불이 꺼진다.
+ * @param index 그 줄의 몇 번째. 값이 아니라 자리로 잡는 이유는 같은 말이 한 문장에
+ *              두 번 나오는 예문이 91개 있어서다 — 값으로 견주면 둘이 한꺼번에 켜진다.
+ * @param tok 예문에서 누른 조각  @param link 이어보기에서 누른 칩
+ */
+data class Peek(
+    val row: String,
+    val index: Int,
+    val tok: Tok? = null,
+    val link: Link? = null
+)
+
+/**
+ * 눌러 둔 자리를 담아 둘 곳. 카드보다 바깥에서 들고 있어야 [PeekCard]를 카드 아래에
+ * 세울 수 있다. [keys]가 바뀌면 놓는다 — 카드를 넘길 때마다 비우라는 뜻이다.
+ */
 @Composable
-fun AnswerFace(says: List<Say>, link: LinkLine?, speaker: Speaker) {
-    says.forEach { say -> SayRow(say) { speaker.speak(it) } }
-    if (link != null) LinkRow(link) { speaker.speak(it) }
+fun rememberPeek(vararg keys: Any?): MutableState<Peek?> =
+    remember(*keys) { mutableStateOf<Peek?>(null) }
+
+/** 정답면 아래쪽 — 읽기 줄들과 이어보기 한 줄. 누른 것은 [PeekCard]가 받는다. */
+@Composable
+fun AnswerFace(says: List<Say>, link: LinkLine?, speaker: Speaker, peek: MutableState<Peek?>) {
+    says.forEach { say -> SayRow(say, peek) { speaker.speak(it) } }
+    if (link != null) LinkRow(link, peek) { speaker.speak(it) }
 }
 
-/** 읽기 한 줄 + 재생 단추. 예문 줄에는 눌러 볼 수 있는 일본어가 위에 하나 더 선다. */
+/**
+ * 눌러 본 것을 담은 카드. 호출부는 원래 카드 **바로 다음**에 놓는다.
+ * 안 누른 상태에서는 아무것도 안 그리므로 조건을 밖에 또 쓸 일이 없다.
+ */
 @Composable
-private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
+fun PeekCard(peek: Peek?, onSpeak: (String) -> Unit) {
+    if (peek == null) return
     val m = LocalMasu.current
 
-    /**
-     * 눌러 둔 조각의 **자리**. 줄을 옮겨 누르면 그 조각으로 갈리고, 같은 것을 다시
-     * 누르면 접힌다.
-     *
-     * 조각 자체가 아니라 몇 번째인지를 들고 있는 이유는 같은 말이 한 문장에 두 번
-     * 나오는 예문이 91개 있기 때문이다(`何時に開いて何時に閉まりますか`의 `何`).
-     * 값으로 견주면 둘이 한꺼번에 켜지고, 뒤엣것을 누르면 앞엣것과 같다고 보아 접힌다.
-     *
-     * 카드가 바뀌면 놓는다. 열쇠가 [Say.key]인 이유는 그쪽을 보라 — 조각 목록으로
-     * 잡으면 재그리기마다 목록을 통째로 견주는 데다 예문이 같은 카드끼리 안 갈린다.
-     */
-    var picked by remember(say.key) { mutableStateOf<Int?>(null) }
+    Spacer(Modifier.height(10.dp))
+    MasuCard {
+        if (peek.tok != null) PickedRow(peek.tok, onSpeak)
+        if (peek.link != null) {
+            Text(
+                peek.link.label,
+                fontFamily = JpFont,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = m.sumi
+            )
+            Spacer(Modifier.height(8.dp))
+            // 여기 서는 줄들에는 끊어 둔 예문이 없다 — 한자 뒷면은 음독·훈독·구성·
+            // 예시 단어뿐이라 누를 조각이 아예 없다. 그래서 이 홀더는 늘 비어 있고,
+            // 풀이 카드 안에서 또 한 장이 열리는 일도 없다.
+            val inner = rememberPeek(peek)
+            peek.link.says.forEach { say -> SayRow(say, inner, onSpeak) }
+        }
+    }
+}
+
+/**
+ * 읽기 한 줄 + 재생 단추. 예문 줄에는 눌러 볼 수 있는 일본어가 위에 하나 더 선다.
+ *
+ * 누른 조각은 여기서 그리지 않고 [peek]에 적어 둔다 — 카드 아래 [PeekCard]가 받는다.
+ */
+@Composable
+private fun SayRow(say: Say, peek: MutableState<Peek?>, onSpeak: (String) -> Unit) {
+    val m = LocalMasu.current
+
+    /** 이 줄에서 눌러 둔 조각의 자리. 다른 줄에서 눌렀으면 이 줄은 꺼진 것이다. */
+    val picked = peek.value?.takeIf { it.row == say.label }?.index
 
     Row(
         Modifier.fillMaxWidth().padding(vertical = 2.dp),
@@ -174,7 +234,10 @@ private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
         Text(say.label, fontSize = 11.sp, color = m.sumi3, modifier = Modifier.width(62.dp))
         Column(Modifier.weight(1f)) {
             if (say.tokens != null) {
-                TokenLine(say.tokens, picked) { picked = if (picked == it) null else it }
+                TokenLine(say.tokens, picked) { i ->
+                    peek.value =
+                        if (picked == i) null else Peek(say.label, i, tok = say.tokens[i])
+                }
             }
             Text(
                 say.text,
@@ -184,8 +247,6 @@ private fun SayRow(say: Say, onSpeak: (String) -> Unit) {
                 color = m.sumi,
                 modifier = Modifier.fillMaxWidth()
             )
-            val tok = picked?.let { say.tokens?.getOrNull(it) }
-            if (tok != null) PickedRow(tok) { text -> onSpeak(text) }
         }
         // 구성 설명처럼 읽어줄 게 없는 줄은 단추 대신 같은 폭을 비워 둔다.
         // 그래야 여러 줄의 본문 왼쪽 끝이 그대로 맞는다.
@@ -317,11 +378,7 @@ private fun PickedRow(tok: Tok, onSpeak: (String) -> Unit) {
     val read = TokenData.entryOf(tok)?.read
         ?: tok.read.takeIf { tok.base == tok.surface && it != tok.surface }
 
-    Row(
-        Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 2.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("└", fontSize = 12.sp, color = m.sumi3, modifier = Modifier.padding(end = 6.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             buildAnnotatedString {
                 if (tok.base != tok.surface) {
@@ -352,11 +409,18 @@ private fun PickedRow(tok: Tok, onSpeak: (String) -> Unit) {
 /**
  * 이어보기 칩 줄. 칩마다 길이가 달라 [FlowRow]로 흘려 담는다.
  * 왼쪽 이름표 폭은 [SayRow]와 맞춰 두 줄의 본문이 같은 자리에서 시작하게 한다.
+ *
+ * 누른 칩의 뒷면은 [peek]에 적어 두고 카드 아래 [PeekCard]가 받는다. 칩 옆에 붙일
+ * 폭이 없어 칩 줄 아래에 펴 왔는데, 그러면 카드가 늘어나며 아래 단추들이 밀려난다.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LinkRow(line: LinkLine, onSpeak: (String) -> Unit) {
+private fun LinkRow(line: LinkLine, peek: MutableState<Peek?>, onSpeak: (String) -> Unit) {
     val m = LocalMasu.current
+
+    /** 펴 둔 칩의 자리. 다른 줄에서 눌렀으면 이 줄은 꺼진 것이다. */
+    val picked = peek.value?.takeIf { it.row == line.label }?.index
+
     Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
         Text(
             line.label,
@@ -369,7 +433,12 @@ private fun LinkRow(line: LinkLine, onSpeak: (String) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            line.items.forEach { link -> Chip(link.label) { onSpeak(link.speak) } }
+            line.items.forEachIndexed { i, link ->
+                Chip(link.label, selected = i == picked) {
+                    if (link.says.isEmpty()) onSpeak(link.speak)
+                    else peek.value = if (picked == i) null else Peek(line.label, i, link = link)
+                }
+            }
         }
         // 재생 단추 자리를 비워 읽기 줄들과 오른쪽 끝을 맞춘다.
         Spacer(Modifier.width(48.dp))

@@ -15,6 +15,14 @@ enum class CardKind(val label: String) { WORD("단어"), KANJI("한자") }
  * 실력을 살짝 과대평가한다 — 직접 채점이라 어렵게 느끼면 낮게 주면 된다.
  */
 enum class Ask(val label: String) {
+    /**
+     * 안 묻는다 — 정답면만 넘겨 본다.
+     *
+     * 방향이 아니지만 같은 목록에 둔다. 「무엇을 물을지」를 고르는 한 자리에서
+     * 「안 묻는다」까지 고르게 하는 편이, 입구를 따로 내고 그 둘이 어긋나지 않게
+     * 맞추는 것보다 낫다. 맨 위인 이유는 나머지 셋과 결이 달라서다.
+     */
+    VIEW("보기"),
     SHOW("일→한"),
     RECALL("한→일"),
     MIX("일↔한");
@@ -22,6 +30,8 @@ enum class Ask(val label: String) {
     /**
      * 카드 통에 넣을 방향들. [MIX]는 둘 다 넣고 중복 제거에 맡긴다 —
      * 통에 두 장이 들어가도 열쇠가 같아 한 묶음에는 한 장만 나온다.
+     *
+     * [VIEW]는 여기 오지 않는다. 채점하는 화면에 닿기 전에 갈린다.
      */
     fun faces(): List<Ask> = if (this == MIX) listOf(SHOW, RECALL) else listOf(this)
 }

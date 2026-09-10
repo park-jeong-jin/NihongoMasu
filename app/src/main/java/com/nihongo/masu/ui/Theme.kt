@@ -20,8 +20,10 @@ import androidx.compose.ui.unit.sp
  * 넘긴다. sumi3는 10~13sp 안내 문구, shu는 「자주 틀림 N」과 지우기 버튼,
  * ok는 목표 달성 문구에 쓰인다. rule은 장식이라 제외.
  *
- * gold는 연속기록 점의 채움이자 「단어 맞추기」의 액센트라 글자·진행바로도 쓰인다.
- * 밝은 금색(#FFB020)은 흰 카드와 1.8:1이라 둘 다 못 버텨서 한 단계 내렸다.
+ * gold는 「단어 맞추기」의 액센트이자 진행 막대의 '익히는 중' 칸이라 글자로도 쓰인다.
+ * 밝은 금색(#FFB020)은 흰 카드와 1.8:1이라 못 버텨서 한 단계 내렸는데, 그렇게 내린
+ * #B45309는 색상환에서 shu와 35°밖에 안 떨어져 막대에서 빨강처럼 읽혔다. 밝기는 그대로
+ * 두고 색상만 노랑 쪽으로 돌려(26°→44°) 53°를 벌렸다. 더 밝히면 4.5:1이 깨진다.
  *
  * okSoft·shuSoft는 채점 순간 카드에 잠깐 깔리는 바탕이라, 그 위에 얹히는 글자도
  * 같은 기준을 넘겨야 한다. 그래서 알아볼 만큼만 옅게 물들이고 — 더 진하게 하면
@@ -65,7 +67,7 @@ val LightMasu = MasuColors(
     shu = Color(0xFFD32F4A), shuSoft = Color(0xFFFFF4F6),
     ai = Color(0xFF3B5BDB), aiSoft = Color(0xFFE7EDFF),
     ok = Color(0xFF0B815A), okSoft = Color(0xFFEAFBF3),
-    gold = Color(0xFFB45309), murasaki = Color(0xFF6D28D9), sora = Color(0xFF0E7490),
+    gold = Color(0xFF8F6A00), murasaki = Color(0xFF6D28D9), sora = Color(0xFF0E7490),
     grad = listOf(Color(0xFF2F4BC9), Color(0xFF4A66DD)),
     dark = false
 )

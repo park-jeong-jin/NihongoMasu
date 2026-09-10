@@ -37,13 +37,13 @@ private data class Row4(
 )
 
 private enum class Filter(val label: String) {
-    DUE("오늘 복습"), WEAK("자주 틀림"), WRONG("틀린 적 있음"), ALL("배운 카드 전체")
+    LEARNING("익히는 중"), WEAK("자주 틀림"), WRONG("틀린 적 있음"), ALL("배운 카드 전체")
 }
 
 /**
  * 기능 3 — 오답 노트.
  *
- * 오늘 복습일이 된 카드와 틀린 카드를 모아 본다. 기본은 '오늘 복습'이고,
+ * 아직 익힘에 못 오른 카드와 틀린 카드를 모아 본다. 기본은 '익히는 중'이고,
  * '자주 틀림'(두 번 이상 틀렸고 맞힌 횟수보다 틀린 횟수가 많은 것)으로
  * 좁히거나 범위를 넓혀 볼 수도 있다.
  * 한 줄을 눌러 발음을 듣고, 초기화해서 처음부터 다시 배울 수 있다.
@@ -95,10 +95,10 @@ private fun rowsOf(store: Store): List<Row4> {
 }
 
 /** 고른 갈래만 남기고, 많이 틀린 것부터 세운다. */
-private fun List<Row4>.by(kind: Filter, today: Long): List<Row4> = filter { row ->
+private fun List<Row4>.by(kind: Filter): List<Row4> = filter { row ->
     when (kind) {
-        // 홈 머리에 뜨는 '오늘 복습할 카드'와 같은 셈이다 (Store.countDue).
-        Filter.DUE -> Srs.isDue(row.rec, today) && !Srs.isMastered(row.rec)
+        // 위 요약의 '익히는 중' 숫자와 같은 셈이다 (Store.countLearning).
+        Filter.LEARNING -> Srs.isLearning(row.rec)
         Filter.WEAK -> Srs.isWeak(row.rec)
         Filter.WRONG -> row.rec.ng > 0
         Filter.ALL -> true
@@ -117,8 +117,8 @@ fun ReviewFlow(
     onOpen: () -> Unit,
     onClose: () -> Unit
 ) {
-    var filter by remember { mutableStateOf(Filter.DUE) }
-    val shown = rowsOf(store).by(filter, store.today())
+    var filter by remember { mutableStateOf(Filter.LEARNING) }
+    val shown = rowsOf(store).by(filter)
 
     if (practicing) {
         ReviewPractice(store, speaker, shown, filter, onClose)
@@ -153,7 +153,7 @@ private fun ReviewList(
         // 요약
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             StatBox("익힘", store.countMastered(store.activeCardIds).toString(), m.ok, Modifier.weight(1f))
-            StatBox("복습 대기", store.countDue(store.activeCardIds).toString(), m.ai, Modifier.weight(1f))
+            StatBox("익히는 중", store.countLearning(store.activeCardIds).toString(), m.ai, Modifier.weight(1f))
             StatBox("자주 틀림", store.countWeak(store.activeCardIds).toString(), m.shu, Modifier.weight(1f))
         }
 
@@ -171,7 +171,7 @@ private fun ReviewList(
         if (shown.isEmpty()) {
             EmptyNote(
                 when (filter) {
-                    Filter.DUE -> "오늘 복습할 카드가 없습니다.\n밀린 복습을 다 따라잡았습니다."
+                    Filter.LEARNING -> "익히는 중인 카드가 없습니다.\n배운 카드가 다 익힘에 올랐습니다."
                     Filter.WEAK -> "자주 틀리는 카드가 없습니다.\n두 번 이상 틀린 카드가 여기 모입니다."
                     Filter.WRONG -> "틀린 카드가 없습니다."
                     Filter.ALL -> "아직 배운 카드가 없습니다.\n가나 맞추기나 단어 맞추기를 시작해 보세요."
@@ -293,13 +293,18 @@ private fun ReviewPractice(
     val session = rememberQuizSession(store, { r: Row4 -> r.id }) { rows }
     val verdict = session.verdict
 
-    // 이미 걸러 온 목록이라 Srs.queue를 다시 돌리지 않는다. 오늘 통과한 카드는
-    // 여기서 직접 뺀다 — 「한 바퀴 더」가 방금 맞힌 카드를 또 채점하면 안 된다.
+    // 들어올 때의 목록. 채점하면 rows에서 하나씩 빠져 나가므로 다 돌면 빈다 —
+    // 그때 여기로 돌아와 한 바퀴를 더 깐다.
+    val start = remember { rows }
+
+    // 이미 걸러 온 목록이라 Srs.queue를 다시 돌리지 않는다. 아직 안 본 것부터,
+    // 묶음 크기로 자르지 않고 통으로 낸다 — 목록 단추가 「50장 연습하기」라고 말해
+    // 놓고 15장에서 한 바퀴가 끝나면, 남은 서른다섯을 받으러 목록을 세 번 더
+    // 들락거려야 한다. 쌓인 카드는 여기서 한 자리에 끝내는 게 이 화면의 일이다.
+    // 다 돌고 나서 다시 낸 카드를 또 맞혀도 Srs.grade가 점수를 올리지 않는다.
     fun rebuild() {
-        session.rebuild(
-            rows.filterNot { Srs.isDoneToday(it.rec, store.today()) }
-                .take(store.settings.batch)
-        )
+        val left = rows.filterNot { Srs.isDoneToday(it.rec, store.today()) }
+        session.rebuild(left.ifEmpty { start.shuffled() })
         revealed = false
     }
 
@@ -307,25 +312,40 @@ private fun ReviewPractice(
     // 맞힌 카드가 목록에서 빠지면서 큐가 줄면 풀던 자리를 잃는다.
     remember { rebuild() }
 
-    ScreenColumn {
+    val row = session.card
+
+    fun answer(rating: Rating) =
+        // 되돌리면 정답을 펼친 자리로 돌아온다.
+        session.grade(rating, restore = { revealed = true }) { revealed = false }
+
+    // 단어 맞추기와 같은 이유로 채점 단추를 스크롤 밖에 못 박는다.
+    ScreenColumn(header = {
+        if (!session.done && row != null) {
+            QuizHeader(session, filter.label)
+            Spacer(Modifier.height(24.dp))
+        }
+    }, pinned = {
+        if (!session.done && row != null) {
+            Spacer(Modifier.height(12.dp))
+            if (!revealed) {
+                PrimaryButton("정답 확인", { revealed = true }, Modifier.fillMaxWidth())
+            } else {
+                RatingRow { answer(it) }
+            }
+        }
+    }) {
         if (session.done) {
             CycleDone(session, onClose) { rebuild() }
             return@ScreenColumn
         }
 
-        val row = session.card
         if (row == null) {
             EmptyNote("${filter.label} 카드가 없습니다.")
             return@ScreenColumn
         }
 
-        fun answer(rating: Rating) =
-            // 되돌리면 정답을 펼친 자리로 돌아온다.
-            session.grade(rating, restore = { revealed = true }) { revealed = false }
-
-        QuizHeader(session, filter.label)
-
-        Spacer(Modifier.height(24.dp))
+        // 카드를 넘기거나 정답면을 접으면 눌러 둔 풀이도 같이 놓는다.
+        val peek = rememberPeek(row, revealed)
 
         QuizCard(verdict) {
             JpText(row.glyph, if (row.glyph.length > 3) 34 else 64)
@@ -342,10 +362,10 @@ private fun ReviewPractice(
                 Spacer(Modifier.height(12.dp))
                 // 단어 맞추기와 같은 줄들. 음독·훈독·예문이 줄마다 따로 소리 난다 —
                 // 한 방으로 뭉쳐 두면 여기서만 예시 읽기밖에 못 듣는다.
-                AnswerFace(row.says, row.link, speaker)
+                AnswerFace(row.says, row.link, speaker, peek)
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    "틀림 ${row.rec.ng} · 맞음 ${row.rec.ok} · 단계 ${row.rec.box}/${Srs.MASTERED_BOX}",
+                    scoreLine(row.rec),
                     fontSize = 11.sp,
                     color = m.sumi3
                 )
@@ -355,13 +375,7 @@ private fun ReviewPractice(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
-
-        if (!revealed) {
-            PrimaryButton("정답 확인", { revealed = true }, Modifier.fillMaxWidth())
-        } else {
-            RatingRow { answer(it) }
-        }
+        PeekCard(peek.value) { speaker.speak(it) }
     }
 }
 

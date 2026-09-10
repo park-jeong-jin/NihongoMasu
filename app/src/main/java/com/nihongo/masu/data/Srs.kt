@@ -3,23 +3,28 @@ package com.nihongo.masu.data
 /**
  * 카드 한 장의 학습 기록.
  *
- * @param box  숙련 점수 0..[Srs.MASTERED_BOX]. 높을수록 다음 복습까지 길게 쉰다.
- * @param due  다음에 봐야 하는 날 (1970-01-01부터 센 일수)
+ * @param score 숙련 점수 0 이상. [Srs.MASTERED_AT]에 닿으면 익힘이고, 그 뒤로도 계속 오른다.
  * @param ok   맞힌 횟수
  * @param ng   틀린 횟수
- * @param last 마지막으로 본 날
+ * @param last 마지막으로 본 날 (1970-01-01부터 센 일수)
+ * @param fail 마지막 답이 못 넘긴 등급이었나
  * @param traced 따라쓰기 연습 횟수
  * @param best  모양 비교 최고 점수 0..100
  *
- * 「오늘 오른 날」 필드는 두지 않는다. [last]와 [due]로 판정되므로 필드도, 저장 형식
- * 마이그레이션도 필요 없다.
+ * **「복습일」 칸은 없다.** 날짜로 간격을 재지 않는다 — [Srs.queue]가 점수 낮은 순으로
+ * 내므로 점수가 그대로 「덜 나옴」이고, 점수가 하루 한 번만 오르는 것이 간격을 만든다.
+ * 사다리 끝에서 멈추지도 않아서 잘 아는 카드는 저절로 통 뒤로 밀려난다.
+ *
+ * [fail] 한 비트가 두 가지를 판정한다 — 익힘 배지([Srs.isMastered])와 「오늘 통과해서
+ * 더 안 물어도 되나」([Srs.isDoneToday]). 둘 다 「마지막 답이 통과였나」를 묻는 것이라
+ * 칸을 두 개 둘 이유가 없다.
  */
 data class Rec(
-    val box: Int = 0,
-    val due: Long = 0L,
+    val score: Int = 0,
     val ok: Int = 0,
     val ng: Int = 0,
     val last: Long = 0L,
+    val fail: Boolean = false,
     val traced: Int = 0,
     val best: Int = 0
 )
@@ -28,7 +33,7 @@ data class Rec(
  * 채점 등급. 얀키의 Again/Hard/Good/Easy와 같은 네 갈래다.
  *
  * 맞았나 틀렸나 둘로만 받으면 「간신히 떠올린 카드」와 「보자마자 안 카드」가
- * 같은 간격을 받는다. 둘을 갈라야 아슬아슬한 카드가 더 일찍 돌아온다.
+ * 같은 점수를 받는다. 둘을 갈라야 아슬아슬한 카드가 더 자주 돌아온다.
  *
  * [pass]가 false인 등급은 오늘 안에 한 번 더 묻는다 — 점수만 깎고 넘기면
  * 못 떠올린 채로 하루가 끝난다.
@@ -41,32 +46,36 @@ enum class Rating(val label: String, val pass: Boolean) {
 }
 
 /**
- * 진행 막대가 쓰는 구간. 순서가 있으므로 그리는 색도 한 가지 농도 차이로 낸다.
- * 얀키의 New / Learning / Young / Mature에 대응한다.
+ * 진행 막대가 쓰는 구간 — 아직(손 안 댄 카드) · 익히는 중 · 익힘.
+ *
+ * 막대 칸과 하나씩 맞춘다. 얀키를 따라 Young을 하나 더 두었었지만 막대가 세 칸이라
+ * 그리는 자리에서 곧바로 [LEARNING]과 다시 합쳐졌다 — 화면에 안 나타나는 구분은
+ * 그것을 가르는 문턱까지 함께 데리고 다닌다.
  */
-enum class Stage { NEW, LEARNING, YOUNG, MASTERED }
+enum class Stage { NEW, LEARNING, MASTERED }
 
 /**
- * 간격 반복 일정 계산. 안드로이드 API를 쓰지 않는 순수 함수 모음이라
+ * 학습 점수 계산. 안드로이드 API를 쓰지 않는 순수 함수 모음이라
  * 그대로 단위 테스트할 수 있다.
  */
 object Srs {
 
     /**
-     * 단계별 복습 간격(일). 마지막 단계가 '익힘'이다.
+     * 익힘에 닿는 점수. 「보통」만 쓰면 하루 한 칸이라 최소 열흘, 「쉬움」을 섞으면 닷새다.
      *
-     * 두 달까지 끌고 간다. 8일에서 끊으면 그 뒤로 카드가 영영 다시 안 나와서,
-     * 한 달 뒤에는 잊었는데 앱은 익혔다고 표시하는 상태가 된다.
+     * 날짜 간격 사다리(1·2·4·…·64일)를 쓸 때는 익힘까지 그 합인 127일이 걸렸다. 두 달
+     * 뒤의 기억을 확인한다는 뜻이 있었지만, 매일 앱을 켜는 사람에게 「넉 달을 기다려라」는
+     * 낼 답이 아니었다. 지금은 **며칠이 아니라 몇 번 맞혔나**로 익힘을 센다.
      */
-    val INTERVALS = intArrayOf(0, 1, 2, 4, 8, 16, 32, 64)
-
-    const val MASTERED_BOX = 7
+    const val MASTERED_AT = 10
 
     /**
-     * 익힘까지의 절반을 넘어선 단계. [MASTERED_BOX]에서 끌어내므로 익힘 기준을
-     * 바꾸면 중간 구간도 같이 따라온다.
+     * 못 넘긴 등급이 깎는 점수. 「틀림」은 쌓아 둔 점수의 절반만 남기되 최소 이만큼은
+     * 깎는다 — 절반이 두 칸 하락보다 덜 깎이는 낮은 점수대가 있어 그대로 두면
+     * 틀림이 어려움보다 후해진다.
      */
-    const val YOUNG_BOX = (MASTERED_BOX + 1) / 2
+    const val HARD_DROP = 2
+    const val FAIL_DROP = 3
 
     /**
      * 틀린 카드를 몇 장 뒤에 다시 물을지. 매번 이 범위에서 뽑는다 —
@@ -81,71 +90,119 @@ object Srs {
     /**
      * 한 묶음의 새 카드·복습 장수 기본값.
      *
-     * 새 카드 몫을 따로 두지 않으면 밀린 복습이 묶음을 통째로 채워서 새 단어가
-     * 한 장도 안 나온다. 얀키가 하루 신규 장수를 복습 상한과 별개의 숫자로 두는
-     * 것과 같은 이유다. 복습만 하루 종일 할 수는 없다. 둘 다 설정에서 바꾼다.
+     * 새 카드 몫을 따로 두지 않으면 복습이 묶음을 통째로 채워서 새 단어가 한 장도
+     * 안 나온다. 얀키가 하루 신규 장수를 복습 상한과 별개의 숫자로 두는 것과 같은
+     * 이유다. 복습만 하루 종일 할 수는 없다. 둘 다 설정에서 바꾼다.
+     *
+     * 복습 몫이 [DEFAULT_LEARNING_CAP]만큼은 돼야 익히는 중 카드가 하루 한 번씩 다
+     * 나온다. 모자라면 손에 쥔 카드가 문턱까지 오르는 데 그 배수만큼 더 걸린다.
      */
     const val DEFAULT_FRESH = 5
-    const val DEFAULT_REVIEW = 10
+    const val DEFAULT_REVIEW = 20
+
+    /**
+     * 손에 쥐고 도는 「익히는 중」 카드의 상한. 넘으면 새 카드를 안 낸다.
+     *
+     * 날짜가 없어지면서 **하루에 나올 수 있는 카드 수를 아무것도 막지 않게 됐다.**
+     * 예전에는 복습일이 카드마다 흩어져서 그게 저절로 됐다. 그대로 두면 매일 새 카드가
+     * 0점으로 들어와 낮은 점수대를 채우고, 점수 낮은 순으로 내는 큐가 늘 그것들을
+     * 앞세워서 먼저 배운 카드가 영영 문턱에 못 닿는다 — 카드 하나에 오름 열 번이
+     * 필요한데 새 카드가 하루 다섯 장 들어오면 하루에 복습 쉰 번이 필요하다.
+     *
+     * 그래서 자리가 비는 만큼만 새로 튼다. 얀키의 학습 대기열 상한과 같은 생각이다.
+     * 상한 20 · 복습 20장이면 20장이 하루 한 번씩 올라 열흘에 문턱을 넘으므로
+     * 하루 두 장쯤 익힘에 오르고, 그만큼 새 카드가 들어온다.
+     */
+    const val DEFAULT_LEARNING_CAP = 20
 
     /**
      * 채점 결과를 반영한 새 기록을 돌려준다.
      *
-     * 통과한 등급은 그만큼 점수가 올라 오래 쉰다 — [Rating.GOOD]이 한 단계,
-     * [Rating.EASY]가 두 단계다. 못 넘긴 등급은 오늘 다시 나온다.
+     * 통과한 등급은 점수가 오른다 — [Rating.GOOD]이 한 점, [Rating.EASY]가 두 점.
+     * 못 넘긴 등급은 깎이고 [Rec.fail]이 서서 익힘 배지가 떨어진다.
      *
-     * [Rating.HARD]는 두 단계를 내린다. 한 단계만 내리면 애매하게 아는 카드가
-     * 계속 통과해 버려서, 확실히 다시 익히도록 두 칸을 쓴다.
+     * **오름은 하루 한 번, 내림은 언제든 그 자리에서 한다.** 오늘 이미 본 카드를 또
+     * 맞혀도 점수는 그대로다 — 그러지 않으면 「한 바퀴 더」를 열 번 돌려 오늘 처음 본
+     * 글자를 익힘으로 만들 수 있고, 그게 이 점수판의 유일한 간격이다. 반대로 못 떠올린
+     * 것은 몇 바퀴째든 그대로 깎는다. 오늘 틀려서 깎인 점수는 그날 안에 회복되지 않고,
+     * 다시 맞히면 [Rec.fail]만 내려가 익힘 배지가 돌아온다.
      *
-     * [Rating.AGAIN]은 쌓아 둔 점수의 절반만 남긴다. 바닥으로 되돌리면 두 달 걸려
-     * 올린 카드가 한 번에 날아간다. 얀키가 그렇게 해도 되는 건 간격과 별개로
-     * ease factor가 남아 회복이 빠르기 때문인데, 여기는 [box] 하나가 전부라
-     * 0으로 보내면 고정 사다리를 일곱 번 다시 올라야 한다.
+     * [Rating.AGAIN]은 쌓아 둔 점수의 절반만 남긴다. 바닥으로 되돌리면 몇 달 쌓은
+     * 카드가 한 번에 날아가는데, 한 번의 생각 안 남은 것이 그만한 일은 아니다.
+     * 절반이 [HARD_DROP]보다 덜 깎이는 낮은 점수대는 [FAIL_DROP]이 받는다.
      *
-     * 절반이 두 칸 하락보다 덜 깎이는 구간(점수 4 이하)이 있어 그대로 두면
-     * 틀림이 어려움보다 후해진다. 둘 중 낮은 쪽을 써서 순서를 지킨다.
-     *
-     * 복습일을 보고 안 올리는 방식(얀키 review-ahead)은 쓰지 않는다. 일정은 더 정확해지지만
-     * 같은 [today]로 연속 채점해 [Rec.box]가 0→7로 오르는 것을 고정한 테스트 2개를
-     * 「날짜를 넘기며 채점」으로 고쳐야 한다. 같은 날 반복만 막아도 하루 한 단계로 수렴한다.
+     * 맞음·틀림 횟수는 언제 답했든 쌓인다. 실제로 그만큼 답한 것이다.
      */
     fun grade(rec: Rec, rating: Rating, today: Long): Rec {
-        val box = when (rating) {
-            Rating.AGAIN -> minOf(rec.box / 2, rec.box - 2).coerceAtLeast(0)
-            Rating.HARD -> maxOf(0, rec.box - 2)
-            Rating.GOOD -> minOf(MASTERED_BOX, rec.box + 1)
-            Rating.EASY -> minOf(MASTERED_BOX, rec.box + 2)
+        val seenToday = rec.last == today
+        val score = when (rating) {
+            Rating.AGAIN -> minOf(rec.score / 2, rec.score - FAIL_DROP)
+            Rating.HARD -> rec.score - HARD_DROP
+            Rating.GOOD -> if (seenToday) rec.score else rec.score + 1
+            Rating.EASY -> if (seenToday) rec.score else rec.score + 2
         }
         return rec.copy(
-            box = box,
-            // 통과한 카드의 간격은 INTERVALS[0]이 0이라 box 0에서 오늘로 떨어질 수
-            // 있는데, 통과하면 box가 반드시 1 이상이라 그 자리는 오지 않는다.
-            due = if (rating.pass) today + INTERVALS[box] else today,
+            score = score.coerceAtLeast(0),
             ok = if (rating.pass) rec.ok + 1 else rec.ok,
             ng = if (rating.pass) rec.ng else rec.ng + 1,
+            fail = !rating.pass,
             last = today
         )
     }
+
+    /**
+     * 점수를 손으로 놓는다. [grade]의 「오름은 하루 한 번」을 지나가는 유일한 자리다.
+     *
+     * 이미 아는 단어를 열흘 걸려 문턱까지 올릴 이유가 없어서 둔다. 가타카나 외래어처럼
+     * 읽으면 그냥 아는 것들이 0점으로 들어와 [DEFAULT_LEARNING_CAP]을 채우고 있으면,
+     * 정작 외워야 할 단어가 새 카드로 나올 자리를 못 얻는다.
+     *
+     * [Rec.fail]을 내린다. 점수만 [MASTERED_AT]에 놓으면 예전에 틀려 비트가 서 있는
+     * 카드가 10점인데 익힘이 아닌 채로 남는다.
+     *
+     * [Rec.ok]·[Rec.ng]·[Rec.last]는 안 건드린다. 실제로 답한 것이 아니라 맞음·틀림에
+     * 셀 것이 없고, `last`를 오늘로 밀면 [isDoneToday]가 서서 훑어보기만 한 카드가
+     * 오늘 복습에서 빠진다.
+     */
+    fun setScore(rec: Rec, score: Int): Rec =
+        rec.copy(score = score.coerceIn(0, MASTERED_AT), fail = false)
 
     /** 따라쓰기 연습을 한 번 기록한다. 점수가 오르면 최고점을 갱신한다. */
     fun trace(rec: Rec, score: Int, today: Long): Rec =
         rec.copy(traced = rec.traced + 1, best = maxOf(rec.best, score), last = today)
 
-
-    fun isDue(rec: Rec?, today: Long): Boolean = rec != null && rec.due <= today
-
-    fun isMastered(rec: Rec?): Boolean = rec != null && rec.box >= MASTERED_BOX
+    /**
+     * 익힘. 문턱을 넘었고 **마지막 답이 통과였을 때**만이다.
+     *
+     * 점수만 보면 방금 틀린 카드가 익힘으로 남는다 — 절반으로 깎아도 오래 쌓은 카드는
+     * 문턱보다 한참 위라, 쌓아 둔 점수가 배지를 지켜 주는 방패가 된다. 그러면 홈의
+     * 「익힘 N장」이 실력을 과대평가한다. 다음에 한 번 맞히면 점수 그대로 돌아온다.
+     *
+     * **복습 대상에서 빼지 않는다.** 큐는 점수 낮은 순으로 내니 익힘 카드는 저절로
+     * 통 뒤로 밀리고, 자리가 남으면 그때 나온다.
+     */
+    fun isMastered(rec: Rec?): Boolean =
+        rec != null && rec.score >= MASTERED_AT && !rec.fail
 
     /**
-     * 카드가 놓인 진행 구간. 익힘 하나만 세면 두 달 내내 0이 박혀 있어서
-     * 얼마나 왔는지 알 길이 없다. 얀키가 New/Learning/Young/Mature로 나누어
-     * 보여주는 것과 같은 이유다. 일정 계산에는 쓰지 않는다 — 표시 전용이다.
+     * 손에 쥐고 도는 카드 — 배웠는데 아직 익힘이 아닌 것. 새 카드 유입을 막는
+     * 상한([DEFAULT_LEARNING_CAP])이 이걸 센다.
+     */
+    fun isLearning(rec: Rec?): Boolean = rec != null && !isMastered(rec)
+
+    /**
+     * 카드가 놓인 진행 구간. 익힘 하나만 세면 문턱에 닿기 전 열흘 내내 0이 박혀 있어서
+     * 얼마나 왔는지 알 길이 없다. 점수 계산에는 쓰지 않는다 — 표시 전용이다.
+     *
+     * [isMastered]·[isLearning]으로만 가른다. 점수 문턱을 다시 쓰지 않으므로 막대와
+     * 「익힘 N장」이 어긋날 자리가 없고, **점수 0으로 떨어진 카드도 「익히는 중」이다** —
+     * 여러 번 틀려 0점이 된 카드를 점수만 보고 갈라내면 손도 안 댄 카드와 같은 칸에
+     * 들어간다.
      */
     fun stageOf(rec: Rec?): Stage = when {
-        rec == null || rec.box < 1 -> Stage.NEW
-        rec.box >= MASTERED_BOX -> Stage.MASTERED
-        rec.box >= YOUNG_BOX -> Stage.YOUNG
-        else -> Stage.LEARNING
+        isMastered(rec) -> Stage.MASTERED
+        isLearning(rec) -> Stage.LEARNING
+        else -> Stage.NEW
     }
 
     /** 맞힌 횟수보다 틀린 횟수가 많고 두 번 이상 틀린 카드 = 약한 카드. */
@@ -154,13 +211,16 @@ object Srs {
     /**
      * 오늘 통과해서 그날은 더 물을 필요가 없는 카드.
      *
-     * 오늘 본([Rec.last]) 데다 복습일이 미래로 밀렸다면 통과한 것이다. 오늘 틀린 카드는
-     * `due`가 오늘로 남으므로 여기 걸리지 않는다 — 틀린 건 그날 다시 물어야 한다.
+     * 오늘 본([Rec.last]) 데다 마지막 답이 통과였다면 오늘 몫을 한 것이다. 오늘 틀린
+     * 카드는 [Rec.fail]이 서 있어 여기 걸리지 않는다 — 못 떠올린 건 그날 다시 물어야
+     * 한다. 「어려움」도 못 넘긴 등급이라 같이 남는다.
      *
-     * 따라쓰기만 한 카드도 걸리지 않는다. [trace]는 `due`를 건드리지 않는다.
+     * [trace]가 [Rec.last]를 오늘로 밀지만 [Rec.fail]은 안 건드린다. 따라쓰기만 한
+     * 카드가 「오늘 통과」로 세어질 자리는 없다 — [trace]는 [Store.grade]를 거쳐서만
+     * 불리고, 그 자리에서 [grade]가 이어 돌아 등급대로 [Rec.fail]을 다시 놓는다.
      */
     fun isDoneToday(rec: Rec?, today: Long): Boolean =
-        rec != null && rec.last == today && !isDue(rec, today)
+        rec != null && rec.last == today && !rec.fail
 
     /**
      * 방금 틀린 [index]번 카드를 [gap]장 뒤에 한 번 더 끼워 넣는다.
@@ -217,13 +277,22 @@ object Srs {
     /**
      * 학습 순서를 정한다. [limit]장까지 채우고 같은 카드가 두 번 들어가지 않는다.
      *
-     * 복습부터 채우되 [freshQuota]장은 새 카드 자리로 남겨 둔다. 새 카드가 다
-     * 떨어졌으면 복습이 묶음을 전부 가져가고, 반대로 복습이 모자라면 새 카드가
-     * 남은 자리를 다 받는다. 0을 주면 복습만 나온다.
+     * **점수 낮은 순, 같은 점수면 오래 안 본 순이다.** 점수가 그대로 「덜 나옴」이라
+     * 날짜 없이도 간격이 생긴다 — 잘 아는 카드는 통 뒤로 밀리고, 자주 틀려 점수가
+     * 깎인 카드는 그 자리에서 앞으로 온다. 약한 카드를 따로 앞세우는 바구니가 없는
+     * 이유다. 정렬이 이미 그 일을 한다.
      *
-     * 약한 카드는 복습할 때가 된 것만 앞으로 당긴다. 복습일과 무관하게 앞세우면
-     * 한 번 약해진 카드가 나을 때까지 매 묶음을 차지해 새 카드가 영영 막힌다.
-     * 밀린 오답을 몰아 보는 자리는 오답 노트가 따로 맡고 있다.
+     * 오늘 통과한 카드는 뒤로 보내되 빼지는 않는다. 자리가 남으면 「한 바퀴 더」에
+     * 다시 나오고, 그때 또 맞혀도 [grade]가 점수를 올리지 않는다.
+     *
+     * 복습부터 채우되 [freshQuota]장은 새 카드 자리로 남겨 둔다. 새 카드가 다
+     * 떨어졌으면 복습이 묶음을 전부 가져가고, 반대로 복습이 모자라면 새 카드가 남은
+     * 자리를 다 받는다. 0을 주면 복습만 나온다.
+     *
+     * **익히는 중 카드가 [learningCap]장에 닿으면 새 카드를 아예 안 낸다** — 그 이유는
+     * [DEFAULT_LEARNING_CAP]에 적혀 있다. 세는 범위는 [items] 안이다. 범위를 좁혀
+     * 들어온 사람에게 다른 범위에서 채운 상한을 들이대면, 고른 등급이 통째로 새
+     * 카드인데도 한 장도 안 나온다.
      *
      * 마지막에 전체를 섞는다. 복습을 앞에 몰아 두면 묶음을 중간에 그만뒀을 때
      * 하필 새 카드만 못 보고 끝난다.
@@ -233,28 +302,29 @@ object Srs {
         limit: Int,
         today: Long,
         freshQuota: Int,
+        learningCap: Int,
         idOf: (T) -> String,
         recOf: (String) -> Rec?
     ): List<T> {
-        val weak = ArrayList<T>()
-        val due = ArrayList<T>()
+        val todo = ArrayList<Pair<T, Rec>>()
+        val done = ArrayList<Pair<T, Rec>>()
         val fresh = ArrayList<T>()
-        val rest = ArrayList<T>()
+        var learning = 0
 
         for (item in items) {
             val r = recOf(idOf(item))
-            when {
-                r == null -> fresh.add(item)
-                // 오늘 통과한 카드는 그날 다시 내지 않는다. 「한 바퀴 더」에서 다시 뜨면
-                // 점수가 계속 올라, 오늘 처음 본 글자가 일곱 바퀴에 익힘이 된다.
-                isDoneToday(r, today) -> Unit
-                isMastered(r) || !isDue(r, today) -> rest.add(item)
-                isWeak(r) -> weak.add(item)
-                else -> due.add(item)
+            if (r == null) {
+                fresh.add(item)
+                continue
             }
+            if (isLearning(r)) learning++
+            if (isDoneToday(r, today)) done.add(item to r) else todo.add(item to r)
         }
 
-        weak.shuffle(); due.shuffle(); fresh.shuffle(); rest.shuffle()
+        val byScore = compareBy<Pair<T, Rec>>({ it.second.score }, { it.second.last })
+        val ready = todo.sortedWith(byScore).map { it.first }
+        val later = done.sortedWith(byScore).map { it.first }
+        fresh.shuffle()
 
         val out = ArrayList<T>(limit)
         val seen = HashSet<String>()
@@ -265,17 +335,17 @@ object Srs {
             }
         }
 
-        // 새 카드가 남아 있을 때만 자리를 뗀다. 없으면 복습이 묶음을 다 쓴다.
-        val reviewCap = if (fresh.isEmpty()) limit else limit - freshQuota.coerceIn(0, limit)
-        fill(weak, reviewCap)
-        fill(due, reviewCap)
+        // 상한에 닿았으면 새 카드 자리를 아예 떼지 않는다. 새 카드가 남아 있을 때만
+        // 자리를 떼는 것도 같다 — 없으면 복습이 묶음을 다 쓴다.
+        val room = if (learning >= learningCap) 0 else freshQuota.coerceIn(0, limit)
+        val reviewCap = if (fresh.isEmpty() || room == 0) limit else limit - room
+        fill(ready, reviewCap)
         // 0장은 예약 자리가 없다는 뜻이 아니라 아예 안 내겠다는 뜻이다. 그냥 채우게 두면
         // 복습을 다 따라잡은 날 남은 자리가 전부 새 카드로 넘어간다.
-        if (freshQuota > 0) fill(fresh, limit)
+        if (room > 0) fill(fresh, limit)
         // 어느 한쪽이 몫을 다 못 채웠으면 남은 자리는 다른 쪽이 받는다.
-        fill(weak, limit)
-        fill(due, limit)
-        fill(rest, limit)
+        fill(ready, limit)
+        fill(later, limit)
 
         out.shuffle()
         return out

@@ -2,12 +2,8 @@ package com.nihongo.masu.ui
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -139,6 +135,9 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
 
         Spacer(Modifier.height(14.dp))
 
+        // 답을 고르기 전에는 정답면이 없으므로 [picked]도 열쇠에 넣는다.
+        val peek = rememberPeek(word, picked)
+
         QuizCard(verdict) {
             // 채점하면 이 자리가 그대로 메워진다. 복원한 문장을 아래에 따로 놓으면
             // 같은 문장을 위아래로 두 번 읽는 데다, 정답면의 「예문」 줄에도 또 있어
@@ -175,10 +174,12 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
                 AnswerDivider()
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.padding(horizontal = 14.dp)) {
-                    AnswerFace(saysOf(word), linksOf(word), speaker)
+                    AnswerFace(saysOf(word), linksOf(word), speaker, peek)
                 }
             }
         }
+
+        PeekCard(peek.value) { speaker.speak(it) }
 
         Spacer(Modifier.height(16.dp))
 
@@ -282,30 +283,15 @@ private fun ChoiceRow(choice: Word, answer: Word, picked: Word?, onPick: () -> U
  * 파서는 이 기능이 하는 일에 비해 너무 크다. 그래서 막는 대신 왜 그런지를 적어 둔다.
  */
 @Composable
-fun ClozeExplainer(onDismiss: () -> Unit) {
-    val m = LocalMasu.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("이 판에 대해", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    "문제는 예문에서 단어 하나를 가려 자동으로 만듭니다. " +
-                        "그래서 빈칸에 두 개 이상이 들어맞는 문제가 섞일 수 있습니다.\n\n" +
-                        "이 판은 복습 기록에 남지 않으니 틀려도 잃는 것이 없고, " +
-                        "채점하면 고르지 않은 보기의 뜻도 함께 보여줍니다. " +
-                        "한 문제에 비슷한 말 네 개를 나란히 보는 것이 이 판의 값어치입니다.\n\n" +
-                        "한자가 안 읽혀서 막히면 「읽기 보기」로 문장을 가나로 풀어 봅니다. " +
-                        "빈칸은 그대로 남습니다 — 한국어 뜻은 그대로 정답이라 채점 전에는 " +
-                        "보여주지 않고, 채점하면 정답면에 나옵니다.",
-                    fontSize = 13.sp,
-                    color = m.sumi2,
-                    lineHeight = 21.sp
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
-        containerColor = m.card,
-        shape = RoundedCornerShape(20.dp)
-    )
-}
+fun ClozeExplainer(onDismiss: () -> Unit) = ExplainDialog(
+    "이 판에 대해",
+    "문제는 예문에서 단어 하나를 가려 자동으로 만듭니다. " +
+        "그래서 빈칸에 두 개 이상이 들어맞는 문제가 섞일 수 있습니다.\n\n" +
+        "이 판은 복습 기록에 남지 않으니 틀려도 잃는 것이 없고, " +
+        "채점하면 고르지 않은 보기의 뜻도 함께 보여줍니다. " +
+        "한 문제에 비슷한 말 네 개를 나란히 보는 것이 이 판의 값어치입니다.\n\n" +
+        "한자가 안 읽혀서 막히면 「읽기 보기」로 문장을 가나로 풀어 봅니다. " +
+        "빈칸은 그대로 남습니다 — 한국어 뜻은 그대로 정답이라 채점 전에는 " +
+        "보여주지 않고, 채점하면 정답면에 나옵니다.",
+    onDismiss
+)

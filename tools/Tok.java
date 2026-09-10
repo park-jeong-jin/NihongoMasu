@@ -70,12 +70,15 @@ public class Tok {
             sentences++;
         }
 
+        // 버린 줄이 있으면 쓰지 않고 나간다. 먼저 쓰면 그 단어가 빠진 tokens.tsv 가
+        // 멀쩡한 파일을 덮어써서, 실패한 실행이 리소스를 망가뜨린 채로 남는다.
+        if (bad > 0) {
+            System.err.printf("버린 줄 %d개 — 쓰지 않는다. vocab.tsv 를 고치고 다시 돌린다%n", bad);
+            System.exit(1);
+        }
+
         Files.write(Path.of(args[1]), out.toString().getBytes(StandardCharsets.UTF_8));
         System.out.printf("문장 %d · 토큰 %d · 내용어 %d → %s%n",
             sentences, tokens, content, args[1]);
-        if (bad > 0) {
-            System.err.printf("버린 줄 %d개 — vocab.tsv 를 고치고 다시 돌린다%n", bad);
-            System.exit(1);
-        }
     }
 }

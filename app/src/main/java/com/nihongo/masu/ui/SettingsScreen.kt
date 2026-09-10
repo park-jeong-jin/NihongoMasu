@@ -85,9 +85,12 @@ fun SettingsScreen(store: Store) {
         SectionLabel("묻는 방향")
         MasuCard {
             Text(
-                "단어 맞추기에서 단어와 한자를 어느 쪽으로 물을지입니다. 「그때그때 " +
+                "단어 맞추기와 한자 맞추기에서 무엇을 물을지입니다. 「그때그때 " +
                     "고르기」면 범위를 누를 때마다 물어보고, 하나로 고정해 두면 안 묻고 " +
-                    "바로 시작합니다. 기록은 방향과 무관하게 한 벌입니다.",
+                    "바로 시작합니다. 기록은 방향과 무관하게 한 벌입니다.\n\n" +
+                    "「보기」만 방향이 아닙니다 — 아예 안 묻고 정답면을 넘겨 보기만 하며 " +
+                    "기록에도 안 남습니다. 여기 고정해 두면 두 기능이 늘 보기로 열리니, " +
+                    "다시 풀려면 이 자리에서 되돌립니다.",
                 fontSize = 12.sp,
                 color = m.sumi3
             )
@@ -99,7 +102,7 @@ fun SettingsScreen(store: Store) {
         MasuCard {
             Text(
                 "가나 맞추기와 단어 맞추기가 한 번에 낼 장수입니다. 새 카드와 복습을 " +
-                    "따로 고릅니다 — 합만 정하면 밀린 복습이 그 안에서 얼마를 가져갈지는 " +
+                    "따로 고릅니다 — 합만 정하면 복습이 그 안에서 얼마를 가져갈지는 " +
                     "손댈 수가 없습니다.",
                 fontSize = 12.sp,
                 color = m.sumi3
@@ -108,6 +111,7 @@ fun SettingsScreen(store: Store) {
             Spacer(Modifier.height(10.dp))
             CountSlider("새 카드", s.fresh) { s.fresh = it }
             CountSlider("복습 카드", s.review) { s.review = it }
+            CountSlider("익히는 중 상한", s.learningCap, Settings.CAPS) { s.learningCap = it }
 
             Spacer(Modifier.height(14.dp))
             Text(
@@ -120,6 +124,16 @@ fun SettingsScreen(store: Store) {
             Text(
                 "한쪽이 모자라면 남은 자리는 다른 쪽이 받습니다. 두 카드는 묶음 안에서 " +
                     "섞여서 나옵니다. 둘 다 0으로 둘 수는 없습니다.",
+                fontSize = 12.sp,
+                color = m.sumi3
+            )
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "「익히는 중 상한」은 손에 쥐고 도는 카드 수입니다. 배웠는데 아직 익힘이 " +
+                    "아닌 카드가 이 수에 닿으면 새 카드가 나오지 않습니다 — 자리가 비는 " +
+                    "만큼만 새로 텁니다. 상한이 없으면 새 카드가 매일 0점으로 들어와 " +
+                    "먼저 배운 카드가 익힘까지 못 오릅니다. 복습 카드가 상한만큼은 돼야 " +
+                    "손에 쥔 카드가 하루 한 번씩 다 나옵니다.",
                 fontSize = 12.sp,
                 color = m.sumi3
             )
@@ -292,7 +306,12 @@ private fun ToggleRow(title: String, note: String?, on: Boolean, onChange: (Bool
  * (담아 두면 저장값은 5인데 엄지는 0에 앉아 있게 된다).
  */
 @Composable
-private fun CountSlider(title: String, value: Int, onValue: (Int) -> Unit) {
+private fun CountSlider(
+    title: String,
+    value: Int,
+    range: IntRange = Settings.COUNTS,
+    onValue: (Int) -> Unit
+) {
     val m = LocalMasu.current
     var dragging by remember { mutableStateOf<Float?>(null) }
     val shown = dragging ?: value.toFloat()
@@ -325,7 +344,7 @@ private fun CountSlider(title: String, value: Int, onValue: (Int) -> Unit) {
             dragging = null
         },
         // steps는 기본값 0으로 둔다. 31을 주면 M3가 눈금 31개를 그려 트랙이 지저분해진다.
-        valueRange = Settings.COUNTS.first.toFloat()..Settings.COUNTS.last.toFloat(),
+        valueRange = range.first.toFloat()..range.last.toFloat(),
         colors = SliderDefaults.colors(
             thumbColor = m.ai,
             activeTrackColor = m.ai,

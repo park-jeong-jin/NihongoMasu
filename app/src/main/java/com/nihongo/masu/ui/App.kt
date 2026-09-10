@@ -11,12 +11,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -27,13 +23,11 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,7 +35,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -185,7 +178,7 @@ fun App(store: Store, speaker: Speaker) {
                 Spacer(Modifier.height(10.dp))
 
                 Text(
-                    "오늘 복습할 카드 ${store.countDue(store.activeCardIds)}장",
+                    "오늘 낼 카드 ${store.countTodo(store.activeCardIds)}장",
                     Modifier.padding(horizontal = 28.dp),
                     fontSize = 12.sp,
                     color = m.sumi3
@@ -268,7 +261,7 @@ fun App(store: Store, speaker: Speaker) {
                     Screen.Search -> SearchScreen(store, speaker)
                     // 연습으로 바로 뛰어도 목록이 밑에 깔려 있어야
                     // 뒤로가기와 「목록으로」가 홈이 아니라 목록에 닿는다.
-                    Screen.Home -> HomeScreen(store, speaker) { go ->
+                    Screen.Home -> HomeScreen(store) { go ->
                         if (go is Screen.Practice) stack.add(Screen.Menu(go.feature))
                         stack.add(go)
                     }
@@ -312,32 +305,23 @@ private fun Logo(size: Int) {
  * 버리면 왜 방금 본 카드가 또 나오는지 알 길이 없어서, 접어서 남겨 둔다.
  */
 @Composable
-private fun SrsExplainer(onDismiss: () -> Unit) {
-    val m = LocalMasu.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("복습 방식", fontWeight = FontWeight.Bold) },
-        text = {
-            Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    "맞히면 ${Srs.INTERVALS.drop(1).joinToString(" → ")}일 뒤에 다시 나옵니다. " +
-                        "틀리면 두 단계 떨어지고, 같은 묶음 안에서 " +
-                        "${Srs.LAPSE_GAP.first}~${Srs.LAPSE_GAP.last}장 뒤에 한 번 더 묻습니다. " +
-                        "묶음 끝이라 자리가 없으면 다음 묶음 맨 앞에 나옵니다. " +
-                        "${Srs.MASTERED_BOX}단계에 닿으면 '익힘'으로 넘어가 복습 목록에서 빠집니다.\n\n" +
-                        "단어와 한자는 어느 방향으로 물어도 기록이 한 벌입니다. " +
-                        "「일↔한」으로 두면 같은 카드를 물을 때마다 방향이 바뀝니다.",
-                    fontSize = 13.sp,
-                    color = m.sumi2,
-                    lineHeight = 21.sp
-                )
-            }
-        },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
-        containerColor = m.card,
-        shape = RoundedCornerShape(20.dp)
-    )
-}
+private fun SrsExplainer(onDismiss: () -> Unit) = ExplainDialog(
+    "복습 방식",
+    "맞히면 점수가 오릅니다 — 보통 1점, 쉬움 2점. " +
+        "${Srs.MASTERED_AT}점에 닿으면 '익힘'이고, 그 뒤로도 점수는 계속 오릅니다. " +
+        "점수가 낮은 카드부터 나오므로 잘 아는 카드는 저절로 뒤로 밀립니다.\n\n" +
+        "점수는 하루에 한 번만 오릅니다. 오늘 이미 맞힌 카드는 다시 맞혀도 " +
+        "그대로여서, 한 카드가 익힘에 닿기까지 최소 ${Srs.MASTERED_AT}일이 걸립니다. " +
+        "내려가는 쪽은 그 자리에서 바로 깎입니다 — 어려움은 ${Srs.HARD_DROP}점, " +
+        "틀림은 절반(최소 ${Srs.FAIL_DROP}점)이고 익힘도 함께 풀립니다. " +
+        "다시 한 번 맞히면 점수 그대로 익힘으로 돌아옵니다.\n\n" +
+        "틀린 카드는 같은 묶음 안에서 " +
+        "${Srs.LAPSE_GAP.first}~${Srs.LAPSE_GAP.last}장 뒤에 한 번 더 묻습니다. " +
+        "묶음 끝이라 자리가 없으면 다음 묶음 맨 앞에 나옵니다.\n\n" +
+        "단어와 한자는 어느 방향으로 물어도 기록이 한 벌입니다. " +
+        "「일↔한」으로 두면 같은 카드를 물을 때마다 방향이 바뀝니다.",
+    onDismiss
+)
 
 @Composable
 private fun DrawerRow(label: String, selected: Boolean, onClick: () -> Unit) {
@@ -356,76 +340,74 @@ private fun DrawerRow(label: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * 홈 첫 카드의 머리 — 요즘 쓰는 말 한 마디.
+ * 홈 첫 카드의 머리 — 오늘 한 것과 최근 열흘.
  *
- * 외울 카드가 아니라 앱을 열었을 때 눈에 걸리라고 두는 자리다. 그래서 기록도
- * 남기지 않고 진도에도 안 들어간다.
+ * 진도 막대도 익힘 비율도 「지금까지」를 말한다. 오늘 앉아서 무엇을 했는지는
+ * 그 어디에도 안 나와서, 한 시간을 하고 나와도 화면이 아침과 같아 보였다.
  *
- * 뽑는 것을 `remember`에만 맡긴 이유는 홈이 다른 화면으로 가면 컴포지션에서
- * 빠지기 때문이다 — 메뉴를 다녀오면 저절로 다음 말이 뜬다. 화면에 그대로
- * 머무를 때는 머리를 눌러 넘긴다.
+ * 연속기록 점을 같은 줄 오른쪽에 세운다. 둘 다 「시간」을 말하는 것이라 떨어뜨려
+ * 놓을 이유가 없고, 카드 몸통에서 두 줄이 빠져 막대가 위로 올라온다.
+ *
+ * 오늘 낼 카드 수는 여기 안 적는다 — 바로 아래 단추와 드로어에 이미 두 번 있다.
  */
 @Composable
-private fun SlangHead(speaker: Speaker) {
+private fun TodayHead(store: Store) {
     val m = LocalMasu.current
-    var slang by remember { mutableStateOf(SlangData.other()) }
+    val fresh = store.freshToday
+    // 오늘 채점한 카드에서 새로 튼 것을 뺀 나머지가 복습이다. 한자를 껐다 켜면
+    // 분모(activeCardIds)만 줄어 음수가 날 수 있어 0에서 막는다.
+    val reviewed = (store.countToday(store.activeCardIds) - fresh).coerceAtLeast(0)
 
-    // 액센트 그라데이션을 깐 카드 머리. 모서리는 부모가 자른다 —
-    // 여기서 또 자르면 카드 아래쪽까지 둥글어진다.
     Row(
         Modifier
             .fillMaxWidth()
+            // 액센트 그라데이션을 깐 카드 머리. 모서리는 부모가 자른다 —
+            // 여기서 또 자르면 카드 아래쪽까지 둥글어진다.
             .background(Brush.verticalGradient(m.grad))
-            // pressSurface는 바탕을 Color로만 받아 이 그라데이션을 못 태운다.
-            // 누르는 맛은 포기해도 「무엇이 일어나는지」는 읽어 줘야 한다.
-            .clickable(
-                role = Role.Button,
-                onClickLabel = "다음 말 보기"
-            ) { slang = SlangData.other(slang) }
-            .padding(start = 18.dp, top = 16.dp, bottom = 16.dp, end = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(18.dp),
+        verticalAlignment = Alignment.Bottom
     ) {
         Column(Modifier.weight(1f)) {
             Text(
-                "요즘 쓰는 말",
+                "오늘",
                 fontSize = 12.sp,
                 color = Color.White.copy(alpha = 0.82f),
                 letterSpacing = 1.sp
             )
-            Spacer(Modifier.height(6.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(slang.w, fontFamily = JpFont, fontSize = 30.sp, color = Color.White)
-                // 읽기는 한자가 든 말에만 붙어 있다. 없으면 칸도 두지 않는다.
-                if (slang.read.isNotBlank()) {
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        slang.read,
-                        fontFamily = JpFont,
-                        fontSize = 14.sp,
-                        color = Color.White.copy(alpha = 0.82f),
-                        modifier = Modifier.padding(bottom = 4.dp)
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
+                TodayNum("새 단어", fresh)
+                TodayNum("복습", reviewed)
+            }
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text("최근 10일", fontSize = 11.sp, color = Color.White.copy(alpha = 0.82f))
+            Spacer(Modifier.height(7.dp))
+            // 점은 그라데이션 위에 얹히므로 gold가 아니라 흰색으로 켠다.
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                store.recentStreak(10).forEach { on ->
+                    Box(
+                        Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(Color.White.copy(alpha = if (on) 1f else 0.25f))
                     )
                 }
             }
-            Spacer(Modifier.height(4.dp))
-            Text(slang.mean, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
-            Spacer(Modifier.height(3.dp))
-            Text(
-                slang.note,
-                fontSize = 12.sp,
-                lineHeight = 17.sp,
-                color = Color.White.copy(alpha = 0.78f)
-            )
-        }
-        // 한자가 섞인 표기는 엔진이 음훈을 잘못 고를 수 있어 읽기가 있으면 그쪽을 넘긴다.
-        IconButton(onClick = { speaker.speak(slang.read.ifBlank { slang.w }) }) {
-            Icon(Icons.Filled.PlayArrow, "발음 듣기", tint = Color.White)
         }
     }
 }
 
 @Composable
-fun HomeScreen(store: Store, speaker: Speaker, go: (Screen) -> Unit) {
+private fun TodayNum(label: String, n: Int) {
+    Column {
+        Text("$n", fontFamily = JpFont, fontSize = 30.sp, color = Color.White)
+        Text(label, fontSize = 12.sp, color = Color.White.copy(alpha = 0.78f))
+    }
+}
+
+@Composable
+fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     val m = LocalMasu.current
 
     // 가나를 복습에서 뺐어도 타일은 그대로 있다. 그래서 여기서는 설정을 보지 않고
@@ -435,11 +417,9 @@ fun HomeScreen(store: Store, speaker: Speaker, go: (Screen) -> Unit) {
     val kanjiIds = remember { KanjiData.all.map { it.id } }
 
     val allCardIds = store.activeCardIds
-    val due = store.countDue(allCardIds)
+    val due = store.countTodo(allCardIds)
     val weak = store.countWeak(allCardIds)
     val stages = store.countStages(allCardIds)
-    val mastered = stages[Stage.MASTERED] ?: 0
-    val learning = (stages[Stage.LEARNING] ?: 0) + (stages[Stage.YOUNG] ?: 0)
     val kanaStages = store.countStages(kanaIds)
 
     ScreenColumn {
@@ -451,30 +431,13 @@ fun HomeScreen(store: Store, speaker: Speaker, go: (Screen) -> Unit) {
                 .background(m.card)
                 .border(1.dp, m.rule, RoundedCornerShape(18.dp))
         ) {
-            // 밀린 복습 수가 머리에 크게, 바로 아래 단추에, 드로어 밑에까지 세 번
+            // 오늘 낼 카드 수가 머리에 크게, 바로 아래 단추에, 드로어 밑에까지 세 번
             // 나와 있었다. 한 카드 안에서 두 번은 셋 중 하나가 남으면 될 일이라,
-            // 제일 눈에 띄는 이 자리는 매번 달라지는 것에 내준다.
-            SlangHead(speaker)
+            // 제일 눈에 띄는 이 자리는 매일 달라지는 것에 내준다.
+            TodayHead(store)
 
             Column(Modifier.padding(16.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    store.recentStreak(7).forEach { on ->
-                        Box(
-                            Modifier
-                                .size(12.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(if (on) m.gold else m.sunk)
-                        )
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "최근 7일 · 익히는 중 $learning · 익힘 $mastered",
-                    fontSize = 12.sp,
-                    color = m.sumi3
-                )
-                Spacer(Modifier.height(10.dp))
-                // 익힘만 세면 사다리를 다 오르는 두 달 내내 0이 박혀 있어 오늘 한 공부가
+                // 익힘만 세면 문턱에 닿기 전 열흘 내내 0이 박혀 있어 오늘 한 공부가
                 // 화면에 안 나타난다. 범위 목록과 같은 막대를 써서 첫날부터 움직이게 한다.
                 StageBar(stages, allCardIds.size)
                 Spacer(Modifier.height(14.dp))
@@ -497,17 +460,19 @@ fun HomeScreen(store: Store, speaker: Speaker, go: (Screen) -> Unit) {
         val tiles = listOf(
             Tile(
                 Feature.KANA, "로마자와 듣고 쓰기를 섞어서.",
-                "가나 익힘 ${kanaStages[Stage.MASTERED] ?: 0}",
+                // 막대가 바로 아래에서 「익힘 N」을 말한다. 여기는 통 크기만 적는다 —
+                // 같은 숫자를 두 줄 붙여 두면 어느 쪽을 읽어야 할지 알 수 없다.
+                "가나 ${commas(kanaIds.size)}",
                 kanaStages, kanaIds.size, m.ai
             ),
             Tile(
                 Feature.KANJI, "한 자씩 뜻과 음훈을.",
-                "한자 ${KanjiData.all.size}",
+                "한자 ${commas(KanjiData.all.size)}",
                 store.countStages(kanjiIds), kanjiIds.size, m.ok
             ),
             Tile(
                 Feature.SELF, "일→한·한→일로 묻습니다.",
-                "단어 ${VocabData.all.size}",
+                "단어 ${commas(VocabData.all.size)}",
                 store.countStages(wordIds), wordIds.size, m.gold
             ),
             // 복습 기록을 안 남기니 막대의 분모가 없다. 스피드 타일이 최고점을
@@ -516,7 +481,7 @@ fun HomeScreen(store: Store, speaker: Speaker, go: (Screen) -> Unit) {
                 Feature.CLOZE, "예문의 빈칸을 넷 중에서.",
                 // 통 크기는 단어 수다. 예문 수로 적으면 안 맞는다 — 예문을 나눠 쓰는
                 // 단어가 102쌍 있어 서로 다른 문장은 4,142개뿐이다.
-                "단어 ${Cloze.total}개에서 뽑습니다",
+                "단어 ${commas(Cloze.total)}개에서 뽑습니다",
                 null, 0, m.sora
             ),
             Tile(

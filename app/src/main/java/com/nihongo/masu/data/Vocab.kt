@@ -39,7 +39,7 @@ object VocabData {
         all.filter { it.level == level && (tag == ALL_TAGS || it.tag == tag) }
 
     /**
-     * 한자 한 자가 든 단어들. 카드마다 5,171개를 훑으면 정답면을 펼 때마다
+     * 한자 한 자가 든 단어들. 카드마다 5,429개를 훑으면 정답면을 펼 때마다
      * 전체 스캔이 된다. 한 번만 색인해 두고 찾아 쓴다.
      *
      * 쉬운 등급 · 짧은 표기부터 세운다 — 그 한자를 이제 만난 사람이 먼저 알아야 할
@@ -67,7 +67,7 @@ object VocabData {
      * 알고 있어도 틀린 것이 된다.
      *
      * 통은 필요할 때만 만든다. 셋을 미리 만들어 두면 첫 통에서 다 채우고도
-     * 5,171개를 두 번 더 훑는다.
+     * 5,429개를 두 번 더 훑는다.
      */
     fun distractors(answer: Word, n: Int = 3): List<Word> {
         val out = ArrayList<Word>(n)

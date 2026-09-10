@@ -20,6 +20,7 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,14 +32,17 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableIntStateOf
+// by 위임이 쓰는 연산자다. 이름으로 안 나타나므로 안 쓰는 import로 보인다.
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,14 +57,18 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -361,6 +369,15 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
     private val _total = mutableIntStateOf(0)
     private val _done = mutableStateOf(false)
 
+    /**
+     * 이번 묶음이 시작할 때의 길이. 오답을 되끼워 늘릴 수 있는 한도를 이 값으로 잰다.
+     *
+     * 설정의 묶음 크기로 재면 안 된다 — 오답 노트는 밀린 카드를 통으로 받아서
+     * 묶음 크기보다 긴 큐로 시작한다. 그때 상한이 큐보다 짧으면 첫 장부터 상한에
+     * 걸려 틀린 카드가 그 바퀴 안에 한 번도 다시 안 나온다.
+     */
+    private var base = 0
+
     /** 화면 자리를 되돌리는 쪽. 기록 쪽은 [Store.undo]가 맡는다. */
     val rewind = Rewind()
 
@@ -374,14 +391,16 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
     val card: T? get() = queue.getOrNull(index)
 
     /**
-     * 새 묶음을 깐다. [queue]를 주지 않으면 [Srs.queue]가 약한 카드부터 뽑는다 —
+     * 새 묶음을 깐다. [queue]를 주지 않으면 [Srs.queue]가 점수 낮은 카드부터 뽑는다 —
      * 오답 노트는 이미 걸러 온 목록을 그대로 넘긴다.
      */
     fun rebuild(queue: List<T>? = null) {
         val next = queue ?: Srs.queue(
-            pool(), store.settings.batch, store.today(), store.settings.fresh, idOf
+            pool(), store.settings.batch, store.today(),
+            store.settings.fresh, store.settings.learningCap, idOf
         ) { store.get(it) }
         _queue.value = next
+        base = next.size
         _index.intValue = 0
         _done.value = false
         rewind.mark(null)
@@ -420,7 +439,7 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
         // 못 넘긴 카드는 그 자리에서 몇 장 뒤에 한 번 더 묻는다.
         else _queue.value = Srs.requeue(
             queue, index, pool = pool(),
-            limit = store.settings.batch * Srs.SESSION_CAP,
+            limit = base * Srs.SESSION_CAP,
             idOf = idOf,
             recOf = { store.get(idOf(it)) }
         )
@@ -478,17 +497,36 @@ private data class Bit(
  *
  * 화면 열한 곳이 같은 네 줄을 적어 두고 있었다. 여백이 한 군데서만 어긋나도
  * 화면을 넘길 때 글자가 좌우로 밀려 보이므로, 값이 아니라 자리를 하나로 둔다.
+ *
+ * @param header 스크롤 밖 맨 위에 못 박을 것. 진행 막대와 남은 장수는 카드가 길어
+ *   화면을 넘겨도 보여야 한다 — 몇 장 남았는지가 굴려야 보이면 없는 것과 같다.
+ *   되돌리기 단추도 여기 얹혀 있어서, 잘못 채점한 직후 굴리지 않고 바로 누른다.
+ * @param pinned 스크롤 밖 맨 아래에 못 박을 것. 카드 높이가 장마다 달라서, 넘기는
+ *   단추가 스크롤 안에 있으면 한 장 넘길 때마다 단추가 위아래로 튄다 — 같은 자리를
+ *   연달아 누르려면 화면에 붙어 있어야 한다.
+ *
+ * 둘 다 안 넘기면 예전 그대로 한 칸이다 — 짧은 화면까지 위아래를 못 박으면
+ * 가운데만 굴러 도리어 답답하다.
  */
 @Composable
-fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
+fun ScreenColumn(
+    header: (@Composable ColumnScope.() -> Unit)? = null,
+    pinned: (@Composable ColumnScope.() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
     Column(
         Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp)
-            .padding(bottom = 24.dp),
-        content = content
-    )
+            .padding(bottom = 24.dp)
+    ) {
+        header?.invoke(this)
+        Column(
+            Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            content = content
+        )
+        pinned?.invoke(this)
+    }
 }
 
 /** 화면 위쪽의 얇은 제목줄. */
@@ -784,92 +822,67 @@ fun RatingRow(onRate: (Rating) -> Unit) {
     }
 }
 
-/** 숫자를 적어도 이웃과 안 붙는 최소 칸 너비. 10sp 네 자리에 여백을 더한 값이다. */
-private val LABEL_MIN = 26.dp
+/** 천 단위마다 쉼표. 5429는 한눈에 읽으라고 있는 숫자가 아니다. */
+internal fun commas(n: Int): String = "%,d".format(n)
 
 /**
- * 단계별로 덧칠하는 진행 막대. 익힘이 가장 진하게 왼쪽에 깔리고 오른쪽으로
- * 갈수록 옅어지다가 아직 안 본 카드는 빈 트랙으로 남는다.
+ * 진행 막대. 익힘(초록) · 익히는 중(노랑) · 아직(빨강) 세 칸이고, 막대 바로 위에
+ * 칸과 같은 색으로 장수를 적는다.
  *
- * 색은 [MasuColors.ok] 하나에 농도만 달리한다. 구간마다 다른 색을 주면 서로
- * 경쟁해서 무엇이 좋은 상태인지가 안 보인다. 농도 32%·65%는 눈대중이 아니라
- * 라이트·다크 양쪽에서 이웃 구간이 갈리도록 고른 값이다(OKLab ΔE 최소 14).
+ * 얀키의 네 구간 중 Young과 Learning은 한 칸으로 합친다. 6dp 막대에서 그 둘을
+ * 가르는 것은 농도 차이뿐이라, 이름이 안 붙으면 어느 쪽이 어느 쪽인지 읽을 길이 없다.
  *
- * 칸 아래에는 그 칸의 장수를 적되, 자리가 나는 칸만 적는다. 좁은 칸까지 적으면
- * 이웃 숫자와 붙어 어느 구간 것인지 못 읽는다 — 그런 칸은 막대 길이로만 말하게 둔다.
- * 장수가 0인 구간은 애초에 칸이 없으므로 0이 늘어설 일도 없다.
+ * 장수를 칸 아래에 숫자로만 적던 것을 위로 올려 이름과 함께 뒀다. 라벨 없는 숫자
+ * 셋은 농도를 외워야 읽히고, 좁은 칸은 숫자를 숨겨야 해서 타일마다 뜨는 숫자가
+ * 달랐다. 세 칸이 각자 이름을 달면 막대가 못 하는 말을 글자가 대신한다 — 단어는
+ * 5,429장이라 익힘 20장은 막대 폭 0.4%로 아예 안 보인다.
  *
- * 맨 끝 칸에는 제 장수 대신 총 장수를 적는다. 축의 오른쪽 눈금이라, 빠지면 남은
- * 숫자들이 무엇 분의 몇인지 알 수 없다.
+ * 글자는 한 덩어리라 좁은 타일에서 저절로 두 줄로 접힌다. 칸을 셋으로 나누면
+ * 나누는 쪽이 폭을 알아야 하고, 그 폭은 그려 본 뒤에야 안다.
+ *
+ * 「아직」은 막대만 옅게 깐다. 글자와 같은 진하기로 채우면 처음 켠 화면이 통째로
+ * 빨개져서, 어디까지 왔는지가 아니라 붉은 넓이가 먼저 눈에 든다.
  */
 @Composable
 fun StageBar(counts: Map<Stage, Int>, total: Int, modifier: Modifier = Modifier) {
     val m = LocalMasu.current
-    // 트랙 위에 얹는 게 아니라 트랙과 나란히 놓이므로, 농도를 트랙 색에 미리
-    // 섞어 둔다. 그래야 카드 바탕이 무엇이든 계산한 그 색이 나온다.
-    val fills = listOf(
-        Stage.MASTERED to m.ok,
-        Stage.YOUNG to m.ok.copy(alpha = 0.65f).compositeOver(m.sunk),
-        Stage.LEARNING to m.ok.copy(alpha = 0.32f).compositeOver(m.sunk)
-    ).mapNotNull { (stage, color) ->
-        (counts[stage] ?: 0).takeIf { it > 0 }?.let { it to color }
-    }
-    val rest = (total - fills.sumOf { it.first }).coerceAtLeast(0)
+    val done = counts[Stage.MASTERED] ?: 0
+    val doing = counts[Stage.LEARNING] ?: 0
+    val yet = (total - done - doing).coerceAtLeast(0)
 
     Column(modifier) {
+        Text(
+            buildAnnotatedString {
+                withStyle(SpanStyle(color = m.ok)) { append("익힘 ${commas(done)}") }
+                append("   ")
+                withStyle(SpanStyle(color = m.gold)) { append("익히는 중 ${commas(doing)}") }
+                append("   ")
+                withStyle(SpanStyle(color = m.shu)) { append("아직 ${commas(yet)}") }
+            },
+            fontSize = 10.sp,
+            lineHeight = 14.sp
+        )
+        Spacer(Modifier.height(5.dp))
         Row(
             Modifier.fillMaxWidth().height(6.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
-            fills.forEach { (n, color) ->
-                Box(
-                    Modifier
-                        .weight(n.toFloat())
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(color)
-                )
-            }
-            if (rest > 0) {
-                Box(
-                    Modifier
-                        .weight(rest.toFloat())
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(99.dp))
-                        .background(m.sunk)
-                )
-            }
-        }
-        Spacer(Modifier.height(5.dp))
-        // 막대와 같은 비율·같은 간격으로 나눠야 숫자가 제 칸 아래에 선다.
-        val cells = fills.map { it.first } + listOfNotNull(rest.takeIf { it > 0 })
-        // 칸 폭은 그려 본 뒤에야 안다. BoxWithConstraints로 물으면 이 막대가 든 칸에
-        // IntrinsicSize.Min을 걸 수 없어(SubcomposeLayout은 intrinsic 측정을 못 한다)
-        // 홈 격자가 죽는다. 그래서 폭만 재 두고 다음 프레임에 쓴다 — 첫 프레임은
-        // 폭이 0이라 총 장수만 나오고, 한 프레임 뒤에 나머지 숫자가 붙는다.
-        var width by remember { mutableStateOf(0.dp) }
-        val density = LocalDensity.current
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .onSizeChanged { width = with(density) { it.width.toDp() } },
-            horizontalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            cells.forEachIndexed { i, n ->
-                val last = i == cells.lastIndex
-                val fits = total > 0 && width * (n.toFloat() / total) >= LABEL_MIN
-                Text(
-                    when {
-                        last -> "$total"
-                        fits -> "$n"
-                        else -> ""
-                    },
-                    Modifier.weight(n.toFloat()),
-                    fontSize = 10.sp,
-                    color = m.sumi3,
-                    maxLines = 1,
-                    textAlign = if (last) TextAlign.End else TextAlign.Center
-                )
+            listOf(
+                done to m.ok,
+                doing to m.gold,
+                // 트랙 위에 얹는 게 아니라 트랙과 나란히 놓이므로, 농도를 색에 미리
+                // 섞어 둔다. 그래야 카드 바탕이 무엇이든 계산한 그 색이 나온다.
+                yet to m.shu.copy(alpha = 0.35f).compositeOver(m.sunk)
+            ).forEach { (n, color) ->
+                if (n > 0) {
+                    Box(
+                        Modifier
+                            .weight(n.toFloat())
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(color)
+                    )
+                }
             }
         }
     }
@@ -928,18 +941,35 @@ fun EmptyNote(message: String) {
 }
 
 /**
- * 낼 카드가 없을 때. 원인을 짚어 준다 — 「새 카드 0장으로 뒀다」와 「오늘 복습을 다
+ * 낼 카드가 없을 때. 원인을 짚어 준다 — 「새 카드 0장으로 뒀다」와 「오늘 몫을 다
  * 끝냈다」가 화면에는 똑같이 빈 묶음으로 보여서, 단서가 없으면 고장으로 읽힌다.
+ *
+ * 익히는 중 상한은 여기서 말하지 않는다. 상한에 걸려도 복습 카드는 그대로 나오므로
+ * 큐가 비지 않고, 이 글이 뜨는 자리가 아니다 — 그 상태는 「새 단어만 안 나온다」로
+ * 보이고 설정 화면의 상한 설명이 맡는다.
  */
 @Composable
 fun NothingDue(store: Store) {
+    val s = store.settings
     EmptyNote(
-        if (store.settings.fresh == 0)
-            "지금 낼 카드가 없습니다.\n복습을 다 끝냈고, 설정에서 새 카드를 0장으로 둬서 " +
+        if (s.fresh == 0)
+            "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈고, 설정에서 새 카드를 0장으로 둬서 " +
                 "새 단어가 나오지 않습니다."
         else
-            "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈습니다. 복습일이 되면 다시 나옵니다."
+            "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈습니다. 자정이 지나면 다시 오릅니다."
     )
+}
+
+/**
+ * 성적 한 줄의 글. 카드 밑([RecLine])과 오답 노트 목록이 같은 글을 쓴다 — 두 곳에
+ * 따로 적어 두면 점수 문구를 고칠 때 한쪽이 남는다.
+ *
+ * 점수에 상한이 없으므로 「12/7」 같은 분모를 안 붙인다. 문턱을 넘었는지는 익힘
+ * 글자가 말한다 — 점수만 보면 문턱이 몇인지 화면 어디에도 안 적혀 있다.
+ */
+fun scoreLine(rec: Rec): String {
+    val score = if (Srs.isMastered(rec)) "익힘 ${rec.score}점" else "${rec.score}점"
+    return "맞음 ${rec.ok} · 틀림 ${rec.ng} · $score"
 }
 
 /**
@@ -951,7 +981,7 @@ fun RecLine(rec: Rec?) {
     if (rec == null) return
     Spacer(Modifier.height(14.dp))
     Text(
-        "맞음 ${rec.ok} · 틀림 ${rec.ng} · 단계 ${rec.box}/${Srs.MASTERED_BOX}",
+        scoreLine(rec),
         fontSize = 12.sp,
         color = LocalMasu.current.sumi3
     )
@@ -1014,8 +1044,59 @@ fun ConfirmDialog(
     )
 }
 
+/**
+ * 읽고 닫는 설명 창. 복습 설명과 문장 맞추기 판 설명이 같은 모양이라 한 벌만 둔다.
+ *
+ * 한 번 읽으면 그만인 글이라 화면에 늘 깔아 두면 자리만 먹는다. 그렇다고 빼 버리면
+ * 왜 방금 본 카드가 또 나오는지 알 길이 없어서 접어서 남겨 둔다. 글이 길어 기기
+ * 글꼴이 크면 창을 넘치므로 안쪽을 세로로 굴린다.
+ */
+@Composable
+fun ExplainDialog(title: String, body: String, onDismiss: () -> Unit) {
+    val m = LocalMasu.current
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(body, fontSize = 13.sp, color = m.sumi2, lineHeight = 21.sp)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("닫기") } },
+        containerColor = m.card,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+/**
+ * 글자 칸의 색. M3 기본값은 우리 팔레트가 아니라서 칸마다 여섯 줄을 붙여야 하는데,
+ * 찾기·가나 로마자·스피드가 같은 칸을 쓰므로 한 군데만 고쳐도 어긋난다.
+ */
+@Composable
+fun masuFieldColors(): TextFieldColors {
+    val m = LocalMasu.current
+    return OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = m.ai,
+        unfocusedBorderColor = m.rule,
+        focusedTextColor = m.sumi,
+        unfocusedTextColor = m.sumi,
+        cursorColor = m.ai
+    )
+}
+
+/**
+ * 로마자를 받는 칸의 자판. 일본어 자판이 뜨거나 첫 글자가 대문자로 올라오면 답이
+ * 안 맞는다 — 가나 맞추기와 스피드가 같은 것을 받으므로 한 벌만 둔다.
+ */
+val ROMAJI_KEYS = KeyboardOptions(
+    keyboardType = KeyboardType.Ascii,
+    capitalization = KeyboardCapitalization.None,
+    imeAction = ImeAction.Done
+)
+
 /** 고르기 목록에 붙일 한 줄 설명. */
 private fun noteOf(dir: Ask) = when (dir) {
+    Ask.VIEW -> "묻지 않고 정답면만 넘겨 봅니다"
     Ask.SHOW -> "일본어를 보고 뜻과 읽기를 떠올립니다"
     Ask.RECALL -> "뜻을 보고 일본어를 떠올립니다"
     Ask.MIX -> "카드마다 방향을 섞어서 냅니다"
@@ -1162,7 +1243,7 @@ fun ScopeRow(
 ) {
     val m = LocalMasu.current
     val stages = store.countStages(ids)
-    val due = store.countDue(ids)
+    val due = store.countTodo(ids)
     val weak = store.countWeak(ids)
 
     Column(

@@ -53,7 +53,7 @@ class Settings(private val prefs: SharedPreferences) {
 
     /**
      * 한 묶음에 낼 새 카드와 복습 카드 수. 둘을 따로 고른다 — 합만 정하면
-     * 밀린 복습이 그 안에서 얼마를 가져갈지는 손댈 수가 없다.
+     * 복습이 그 안에서 얼마를 가져갈지는 손댈 수가 없다.
      *
      * 둘 다 0으로 둘 수는 없다. 낼 문제가 없어진다.
      */
@@ -64,6 +64,17 @@ class Settings(private val prefs: SharedPreferences) {
     var review: Int by Pref(
         prefs.getInt(KEY_REVIEW, Srs.DEFAULT_REVIEW).coerceIn(COUNTS),
         allow = { it != 0 || fresh != 0 }
+    )
+
+    /**
+     * 손에 쥐고 도는 「익히는 중」 카드의 상한. 넘으면 새 카드를 안 낸다.
+     * 왜 이 상한이 있는지는 [Srs.DEFAULT_LEARNING_CAP]에 적혀 있다.
+     *
+     * 0을 못 주는 이유는 그 값이 「새 카드를 영영 안 낸다」는 뜻이 되기 때문이다.
+     * 새 카드를 끄고 싶으면 [fresh]를 0으로 두는 자리가 이미 있다.
+     */
+    var learningCap: Int by Pref(
+        prefs.getInt(KEY_CAP, Srs.DEFAULT_LEARNING_CAP).coerceIn(CAPS)
     )
 
     /** 한 묶음 크기. 큐 상한과 진행 막대의 분모가 쓴다. */
@@ -123,6 +134,7 @@ class Settings(private val prefs: SharedPreferences) {
             .putString(KEY_THEME, theme.name)
             .putBoolean(KEY_KANA, kana)
             .putBoolean(KEY_KANJI, kanji)
+            .putInt(KEY_CAP, learningCap)
             // null은 키를 지운다 — 「그때그때 고르기」가 그 상태다.
             .putString(KEY_ASK, ask?.name)
             .apply()
@@ -137,6 +149,14 @@ class Settings(private val prefs: SharedPreferences) {
          */
         val COUNTS = 0..30
 
+        /**
+         * 익히는 중 카드의 상한으로 고를 수 있는 값. 아래를 5로 막는 것은 상한이
+         * 한 묶음보다 한참 작으면 새 카드가 거의 안 나오기 때문이고, 위를 60으로
+         * 막는 것은 손에 쥔 카드가 그보다 많으면 하루 몫으로 한 번씩 다 돌지
+         * 못해 문턱까지 걸리는 날수가 그만큼 늘어나기 때문이다.
+         */
+        val CAPS = 5..60
+
         private const val KEY_SILENT = "set_silent"
         private const val KEY_FRESH = "set_fresh"
         private const val KEY_REVIEW = "set_review"
@@ -144,6 +164,7 @@ class Settings(private val prefs: SharedPreferences) {
         private const val KEY_ASK = "set_ask"
         private const val KEY_KANA = "set_kana"
         private const val KEY_KANJI = "set_kanji"
+        private const val KEY_CAP = "set_cap"
     }
 }
 
@@ -151,7 +172,7 @@ class Settings(private val prefs: SharedPreferences) {
  * 학습 기록을 기기에 저장한다.
  *
  * 외부 데이터베이스 없이 SharedPreferences에 카드마다 한 칸씩 넣는다. 카드는
- * 6,400장 남짓이라(가나 208 + 한자 1,031 + 단어 5,171) 기록을 한 덩어리로 묶으면
+ * 6,600장 남짓이라(가나 208 + 한자 1,031 + 단어 5,429) 기록을 한 덩어리로 묶으면
  * 채점 한 번에 그 전체를 다시 짜야 한다. 한 장이 자기 칸만 쓰면 그 일이 없어지고,
  * 라이브러리를 더하지 않아 빌드도 단순한 채로 남는다.
  *
@@ -186,6 +207,15 @@ class Store(context: Context) {
     /** 최근 학습한 날들(일수). 홈의 연속기록 점이 이걸로 그려진다. */
     private val _days = mutableStateOf<List<Long>>(emptyList())
 
+    /**
+     * 오늘 처음 기록이 생긴 카드 수 — 「오늘 새로 배운 것」이 이 수다. 「센 날 to 장수」다.
+     *
+     * 기록을 훑어서 뒤로 셀 수가 없다. [Rec]에는 '처음 본 날' 칸이 없고, 칸을 늘리면
+     * 이미 저장된 기록이 전부 0을 달고 있어 다음 채점 때 통째로 「오늘 처음」이 된다.
+     * 하루치만 알면 되므로 파일에도 「날짜,장수」 한 줄로 들어간다.
+     */
+    private val _fresh = mutableStateOf(0L to 0)
+
     /** 되돌리기 한 칸. [undoPrev]가 null이면 그 카드는 채점 전에 기록이 없었다. */
     private var undoId: String? = null
     private var undoPrev: Rec? = null
@@ -203,6 +233,25 @@ class Store(context: Context) {
         if (daysRaw != null) {
             _days.value = daysRaw.split(",").mapNotNull { it.trim().toLongOrNull() }
         }
+        val fresh = prefs.getString(KEY_FRESH, null)?.split(",")
+        if (fresh?.size == 2) {
+            val day = fresh[0].toLongOrNull()
+            val n = fresh[1].toIntOrNull()
+            if (day != null && n != null) _fresh.value = day to n
+        }
+    }
+
+    /** 오늘 새로 튼 카드 수. 센 날이 오늘이 아니면 0이다 — 자정에 저절로 풀린다. */
+    val freshToday: Int get() = _fresh.value.let { (day, n) -> if (day == today()) n else 0 }
+
+    /**
+     * 오늘 새로 튼 장수를 [by]만큼 옮긴다. 날이 바뀌었으면 [freshToday]가 0을 주므로
+     * 거기서부터 다시 센다.
+     */
+    private fun bumpFresh(by: Int) {
+        val n = (freshToday + by).coerceAtLeast(0)
+        _fresh.value = today() to n
+        prefs.edit().putString(KEY_FRESH, "${today()},$n").apply()
     }
 
     /** 카드 한 장을 그 자리에 남긴다. 기록 전체를 다시 짜지 않는다. */
@@ -248,6 +297,8 @@ class Store(context: Context) {
         records.putAll(recs)
         _days.value = days
         forgetUndo()
+        // 파일에 안 담기는 값이라 남의 기록 위에 오늘 숫자만 남으면 안 맞는다.
+        bumpFresh(-freshToday)
         replaceAll()
         return true
     }
@@ -281,7 +332,27 @@ class Store(context: Context) {
         undoPrev = records[id]
         val base = if (traceScore == null) cur else Srs.trace(cur, traceScore, today())
         put(id, Srs.grade(base, rating, today()))
+        // 채점 전에 기록이 없었으면 오늘 처음 튼 카드다.
+        if (undoPrev == null) bumpFresh(1)
         touchToday()
+    }
+
+    /**
+     * 훑어보며 점수를 손으로 놓는다. 「보기」가 쓴다.
+     *
+     * **「오늘 새로 튼 장수」와 연속 기록은 안 건드린다.** 안다고 찍은 것은 배운 것이
+     * 아니다 — 1,000장을 찍고 나서 「오늘 새 단어 1,000」이 되면 그 수가 뜻을 잃는다.
+     *
+     * 기록이 없는 카드에 0점을 주면 아무것도 안 만든다. 「아직」과 「0점」은 화면에서
+     * 같아 보이는데 칸만 늘고, 진행 막대에서는 아직이 익히는 중으로 넘어간다.
+     */
+    fun setScore(id: String, score: Int) {
+        val cur = records[id]
+        if (cur == null && score == 0) return
+        put(id, Srs.setScore(cur ?: Rec(), score))
+        // 되돌리기 한 칸이 이 카드의 옛 채점을 가리키고 있으면 무르는 순간 방금 놓은
+        // 점수까지 함께 날아간다.
+        forgetUndo()
     }
 
     /**
@@ -297,7 +368,10 @@ class Store(context: Context) {
     fun undo() {
         val id = undoId ?: return
         val prev = undoPrev
-        if (prev == null) drop(id) else put(id, prev)
+        if (prev == null) {
+            drop(id)
+            bumpFresh(-1)
+        } else put(id, prev)
         forgetUndo()
     }
 
@@ -306,7 +380,12 @@ class Store(context: Context) {
         undoPrev = null
     }
 
-    /** 오답 노트에서 지운다. 다시 처음부터 배우는 셈이 된다. */
+    /**
+     * 오답 노트에서 지운다. 다시 처음부터 배우는 셈이 된다.
+     *
+     * 오늘 새로 튼 장수는 안 건드린다. 지우는 카드가 오늘 처음 튼 것인지 알 길이
+     * 없어서(그 칸이 [Rec]에 없다), 오늘 복습한 옛 카드를 지웠을 때 엉뚱하게 깎인다.
+     */
     fun reset(id: String) {
         drop(id)
         forgetUndo()
@@ -316,6 +395,7 @@ class Store(context: Context) {
         records.clear()
         forgetUndo()
         _days.value = emptyList()
+        bumpFresh(-freshToday)
         replaceAll()
     }
 
@@ -323,15 +403,37 @@ class Store(context: Context) {
 
     fun countMastered(ids: List<String>): Int = ids.count { Srs.isMastered(records[it]) }
 
-    fun countDue(ids: List<String>): Int {
+    /**
+     * 오늘 낼 복습 카드 수. **하루 몫([Settings.review])으로 자른다** — 배운 카드가
+     * 쌓이면 「오늘 아직 안 한 것」이 수백 장이 되는데, 홈 단추가 「복습 시작 · 312장」
+     * 이라고 말하면 오늘 앉아서 끝낼 수 있는 일의 크기를 뜻하지 않는다.
+     *
+     * 익힘 카드도 센다. 큐가 점수 낮은 순으로 내면서 자리가 남을 때 익힘 카드도
+     * 내므로, 여기서 빼면 「복습 0」인 날에 복습 카드가 나온다.
+     */
+    fun countTodo(ids: List<String>): Int {
         val t = today()
-        return ids.count { id ->
+        val n = ids.count { id ->
             val r = records[id]
-            r != null && Srs.isDue(r, t) && !Srs.isMastered(r)
+            r != null && !Srs.isDoneToday(r, t)
         }
+        return minOf(n, settings.review)
     }
 
+    /** 배웠는데 아직 익힘이 아닌 카드 수. 새 카드 유입을 막는 상한이 보는 수다. */
+    fun countLearning(ids: List<String>): Int = ids.count { Srs.isLearning(records[it]) }
+
     fun countWeak(ids: List<String>): Int = ids.count { Srs.isWeak(records[it]) }
+
+    /**
+     * 오늘 한 번이라도 채점한 카드 수.
+     *
+     * [Srs.trace]는 [grade]를 거쳐서만 불리므로 `last`가 오늘이면 오늘 채점한 것이다.
+     */
+    fun countToday(ids: List<String>): Int {
+        val t = today()
+        return ids.count { records[it]?.last == t }
+    }
 
     /**
      * [ids]를 진행 구간별로 센다. 없는 구간은 열쇠가 아예 빠지므로 읽을 때
@@ -343,8 +445,8 @@ class Store(context: Context) {
     /**
      * 스피드 라운드 최고 점수. 서체마다 난이도가 달라 한 칸에 섞지 않는다.
      *
-     * 학습 기록([records])과 따로 둔다 — 1분에 수십 장을 치는 놀이라 복습 일정에
-     * 흘리면 사다리가 뜻을 잃는다. 백업에도 안 담는다. 점수판이지 기록이 아니다.
+     * 학습 기록([records])과 따로 둔다 — 1분에 수십 장을 치는 놀이라 학습 점수에
+     * 흘리면 익힘이 뜻을 잃는다. 백업에도 안 담는다. 놀이 점수판이지 기록이 아니다.
      */
     fun speedBest(key: String): Int = prefs.getInt(KEY_SPEED + key, 0)
 
@@ -369,5 +471,8 @@ class Store(context: Context) {
         private const val KEY_REC = "rec_"
 
         private const val KEY_DAYS = "days_v1"
+
+        /** 오늘 새로 튼 카드 수. 「날짜,장수」 한 줄이다. */
+        private const val KEY_FRESH = "fresh_v1"
     }
 }

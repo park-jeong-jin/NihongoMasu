@@ -4,6 +4,7 @@ import com.nihongo.masu.data.Backup
 import com.nihongo.masu.data.Rec
 import com.nihongo.masu.data.Srs
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -17,8 +18,8 @@ import org.junit.Test
 class BackupTest {
 
     private val records = mapOf(
-        "あ" to Rec(box = 3, due = 20_000L, ok = 5, ng = 2, last = 19_996L, traced = 4, best = 88),
-        "V食べる:listen" to Rec(box = 7, due = 20_064L, ok = 9, last = 20_000L)
+        "あ" to Rec(score = 3, ok = 5, ng = 2, last = 19_996L, fail = true, traced = 4, best = 88),
+        "V食べる:listen" to Rec(score = 12, ok = 9, last = 20_000L)
     )
     private val days = listOf(19_998L, 19_999L, 20_000L)
 
@@ -41,13 +42,35 @@ class BackupTest {
         assertNull(Backup.decode("""{"records":[1,2]}"""))     // 기록이 표가 아니다
     }
 
-    @Test fun `사다리 밖의 점수는 잘라서 받는다`() {
-        val out = Backup.decode("""{"v":1,"records":{"あ":{"b":99}},"days":[]}""")!!.first
-        assertEquals(Srs.MASTERED_BOX, out.getValue("あ").box)
+    @Test fun `말이 안 되는 점수는 잘라서 받는다`() {
+        // 점수에 상한은 없지만, Int 끝값이 들어오면 다음 채점의 +2에서 넘쳐 음수가 된다.
+        val big = Backup.decode("""{"v":1,"records":{"あ":{"p":2147483647}},"days":[]}""")!!.first
+        assertEquals(1_000_000, big.getValue("あ").score)
+        val neg = Backup.decode("""{"v":1,"records":{"あ":{"p":-5}},"days":[]}""")!!.first
+        assertEquals(0, neg.getValue("あ").score)
+    }
+
+    @Test fun `날짜 사다리 시절 파일은 단계를 점수로 옮겨 읽는다`() {
+        // 숫자를 그냥 물려받으면 익힘이던 카드(7단계)가 문턱 아래로 떨어져
+        // 몇 달치 익힘이 한 번에 풀린다. 앱 안 기록도 같은 toRec을 지나므로
+        // 새 버전을 깔았을 때 카드가 놓이는 자리가 이 표다.
+        val old = (0..7).joinToString(",") { """"b$it":{"b":$it,"d":20064,"o":9}""" }
+        val out = Backup.decode("""{"v":1,"records":{$old}}""")!!.first
+        val moved = (0..7).map { out.getValue("b$it").score }
+        assertEquals(listOf(0, 1, 2, 4, 5, 7, 8, 10), moved)
+
+        // 익힘이던 카드는 익힘으로 남는다. 그 아래는 순서가 뒤집히지 않는다.
+        assertEquals(Srs.MASTERED_AT, moved.last())
+        assertTrue(Srs.isMastered(out.getValue("b7")))
+        assertFalse(Srs.isMastered(out.getValue("b6")))
+        assertEquals(moved.sorted(), moved)
+
+        // 옛 복습일(d)은 안 읽는다. 날짜로 재는 것이 없어졌다.
+        assertEquals(0L, out.getValue("b7").last)
     }
 
     @Test fun `날짜가 없는 파일도 읽는다`() {
-        val (back, backDays) = Backup.decode("""{"v":1,"records":{"あ":{"b":1}}}""")!!
+        val (back, backDays) = Backup.decode("""{"v":1,"records":{"あ":{"p":1}}}""")!!
         assertEquals(1, back.size)
         assertTrue(backDays.isEmpty())
     }

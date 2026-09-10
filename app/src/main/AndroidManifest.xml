@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- TTS 소리를 키우는 증폭기(LoudnessEnhancer)를 붙이려면 필요 -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+
     <!-- 기기에 설치된 음성 합성 엔진을 찾기 위해 필요 (Android 11+) -->
     <queries>
         <intent>
