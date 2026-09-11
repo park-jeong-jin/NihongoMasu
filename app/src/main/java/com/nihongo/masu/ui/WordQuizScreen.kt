@@ -3,6 +3,7 @@ package com.nihongo.masu.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -72,11 +73,16 @@ fun WordQuizFlow(
     var tag by remember { mutableStateOf(VocabData.ALL_TAGS) }
     var dir by remember { mutableStateOf(Ask.MIX) }
 
-    // 설정이 「그때그때 고르기」일 때 팝업을 띄우려고 잡아 두는 범위.
-    var pending by remember { mutableStateOf<String?>(null) }
+    // 범위를 단계로 한 번 더 좁혔나. null이면 안 좁힌 것이라 등급·분류 그대로다.
+    var stage by remember { mutableStateOf<Stage?>(null) }
 
-    fun start(t: String, d: Ask) {
+    // 설정이 「그때그때 고르기」일 때 팝업을 띄우려고 잡아 두는 범위.
+    // 단계까지 잡아 둔다 — 팝업에서 방향을 고르고 나서야 판이 깔린다.
+    var pending by remember { mutableStateOf<Pair<String, Stage?>?>(null) }
+
+    fun start(t: String, st: Stage?, d: Ask) {
         tag = t
+        stage = st
         dir = d
         pending = null
         onOpen()
@@ -85,21 +91,32 @@ fun WordQuizFlow(
     if (practicing) {
         // 보기는 채점을 안 하므로 화면이 통째로 다르다. 같은 화면에 조건을 흩뿌리는
         // 것보다 갈라 두는 편이 짧다 — 겹치는 것은 정답면뿐이고 그건 이미 부품이다.
-        if (dir == Ask.VIEW) ViewScreen(store, speaker, level, kind, tag)
-        else WordQuizScreen(store, speaker, level, kind, tag, dir, onClose)
+        if (dir == Ask.VIEW) ViewScreen(store, speaker, level, kind, tag, stage)
+        else WordQuizScreen(store, speaker, level, kind, tag, stage, dir, onClose)
     } else {
-        WordScopeMenu(store, kind, level, { level = it }) { t ->
+        WordScopeMenu(store, kind, level, { level = it }) { t, st ->
             val fixed = store.settings.ask
-            if (fixed == null) pending = t else start(t, fixed)
+            if (fixed == null) pending = t to st else start(t, st, fixed)
         }
     }
 
-    pending?.let { t ->
+    pending?.let { (t, st) ->
         AskDialog(
-            scope = if (kind == CardKind.KANJI) "${level.label} 한자" else "${level.label} $t",
+            scope = scopeLabel(level, kind, t, st),
             onDismiss = { pending = null }
-        ) { start(t, it) }
+        ) { start(t, st, it) }
     }
+}
+
+/**
+ * 화면에 적는 범위 이름. 팝업·진행 머리글·「보기」 머리글이 같은 말을 쓰게 한 자리에 둔다.
+ *
+ * 단계로 좁혀 들어왔으면 뒤에 붙인다. 안 붙이면 스무 장짜리 판이 두 장으로 깔린
+ * 이유가 화면 어디에도 없다.
+ */
+private fun scopeLabel(level: Level, kind: CardKind, tag: String, stage: Stage?): String {
+    val base = "${level.label} " + if (kind == CardKind.KANJI) "한자" else tag
+    return if (stage == null) base else "$base · ${stage.label}"
 }
 
 /**
@@ -112,7 +129,7 @@ private fun WordScopeMenu(
     kind: CardKind,
     level: Level,
     onLevel: (Level) -> Unit,
-    onPick: (String) -> Unit
+    onPick: (String, Stage?) -> Unit
 ) {
     val m = LocalMasu.current
     val fixed = store.settings.ask
@@ -139,6 +156,12 @@ private fun WordScopeMenu(
             fontSize = 13.sp,
             color = m.sumi3
         )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "막대 위 「익힘 · 익히는 중 · 아직」 줄을 누르면 그 단계 카드만 꺼냅니다.",
+            fontSize = 12.sp,
+            color = m.sumi3
+        )
 
         if (kind == CardKind.KANJI) {
             // 복습 범위 밖이면 여기서 채점한 것이 오답 노트에도 익힘 비율에도 안 뜬다.
@@ -153,8 +176,8 @@ private fun WordScopeMenu(
                 )
             }
             SectionLabel("한자")
-            ScopeRow(store, "${level.label} 한자", KanjiData.of(level).map { it.id }) {
-                onPick(VocabData.ALL_TAGS)
+            ScopeRow(store, "${level.label} 한자", KanjiData.of(level).map { it.id }) { st ->
+                onPick(VocabData.ALL_TAGS, st)
             }
         } else {
             SectionLabel("단어")
@@ -162,10 +185,10 @@ private fun WordScopeMenu(
                 store,
                 VocabData.ALL_TAGS,
                 VocabData.of(level, VocabData.ALL_TAGS).map { it.id }
-            ) { onPick(VocabData.ALL_TAGS) }
+            ) { st -> onPick(VocabData.ALL_TAGS, st) }
 
             VocabData.tagsOf(level).forEach { t ->
-                ScopeRow(store, t, VocabData.of(level, t).map { it.id }) { onPick(t) }
+                ScopeRow(store, t, VocabData.of(level, t).map { it.id }) { st -> onPick(t, st) }
             }
         }
     }
@@ -209,17 +232,25 @@ private fun WordQuizScreen(
     level: Level,
     kind: CardKind,
     tag: String,
+    stage: Stage?,
     dir: Ask,
     onClose: () -> Unit
 ) {
     val m = LocalMasu.current
 
+    /** 범위에 든 카드. 단계를 안 좁혔으면 등급·분류 그대로다. */
+    fun wordsFor(): List<Word> =
+        VocabData.of(level, tag).filter { Srs.inStage(store.get(it.id), stage) }
+
+    fun kanjiFor(): List<Kanji> =
+        KanjiData.of(level).filter { Srs.inStage(store.get(it.id), stage) }
+
     // 통에는 방향마다 한 장씩 넣는다. 열쇠가 같아 Srs.queue의 중복 제거가
     // 카드마다 한 방향만 남기고, 버킷이 섞인 뒤라 어느 쪽이 남을지는 랜덤이다.
     fun facesFor(): List<Face> = dir.faces().let { dirs ->
         when (kind) {
-            CardKind.WORD -> VocabData.of(level, tag).flatMap { w -> dirs.map { faceOf(w, it) } }
-            CardKind.KANJI -> KanjiData.of(level).flatMap { k -> dirs.map { faceOf(k, it) } }
+            CardKind.WORD -> wordsFor().flatMap { w -> dirs.map { faceOf(w, it) } }
+            CardKind.KANJI -> kanjiFor().flatMap { k -> dirs.map { faceOf(k, it) } }
         }
     }
 
@@ -228,11 +259,26 @@ private fun WordQuizScreen(
     val verdict = session.verdict
 
     fun rebuild() {
-        session.rebuild()
+        // 「아직」 판만 판 크기를 좁힌다 — 이유는 Srs.freshRoom에 적어 뒀다.
+        // 세는 범위는 단계로 걸러내기 **전**의 등급·분류다. 걸러낸 뒤를 세면
+        // 익히는 중 장수가 정의상 0이라 상한이 아무것도 막지 않는다.
+        if (stage == Stage.NEW) {
+            val ids = when (kind) {
+                CardKind.WORD -> VocabData.of(level, tag).map { it.id }
+                CardKind.KANJI -> KanjiData.of(level).map { it.id }
+            }
+            session.rebuild(
+                limit = Srs.freshRoom(
+                    store.settings.batch,
+                    store.settings.learningCap,
+                    store.countLearning(ids)
+                )
+            )
+        } else session.rebuild()
         revealed = false
     }
 
-    LaunchedEffect(kind, tag, dir) { rebuild() }
+    LaunchedEffect(kind, tag, stage, dir) { rebuild() }
 
     val card = session.card
     var confirmReset by remember { mutableStateOf(false) }
@@ -247,10 +293,7 @@ private fun WordQuizScreen(
     ScreenColumn(header = {
         // 진행 막대와 되돌리기는 카드가 길어도 늘 보여야 한다.
         if (!session.done && card != null) {
-            QuizHeader(
-                session,
-                "${level.label} " + if (kind == CardKind.KANJI) "한자" else tag
-            )
+            QuizHeader(session, scopeLabel(level, kind, tag, stage))
             Spacer(Modifier.height(24.dp))
         }
     }, pinned = {
@@ -272,7 +315,7 @@ private fun WordQuizScreen(
         }
 
         if (card == null) {
-            NothingDue(store)
+            NothingDue(store, stage)
             return@ScreenColumn
         }
 
@@ -365,16 +408,24 @@ private fun ViewScreen(
     speaker: Speaker,
     level: Level,
     kind: CardKind,
-    tag: String
+    tag: String,
+    stage: Stage?
 ) {
     val m = LocalMasu.current
-    val cards = remember(kind, level, tag) {
+    // 단계는 들어올 때 한 번만 거른다. 여기서 점수를 놓으면 그 카드의 단계가 바뀌는데,
+    // 목록을 다시 걸러 버리면 방금 10점을 놓은 카드가 손 밑에서 사라지고 다음 장이
+    // 그 자리로 올라온다 — 훑어보는 화면에서 목록이 움직이면 어디까지 봤는지 잃는다.
+    val cards = remember(kind, level, tag, stage) {
         when (kind) {
-            CardKind.WORD -> VocabData.of(level, tag).map { faceOf(it, Ask.SHOW) }
-            CardKind.KANJI -> KanjiData.of(level).map { faceOf(it, Ask.SHOW) }
+            CardKind.WORD -> VocabData.of(level, tag)
+                .filter { Srs.inStage(store.get(it.id), stage) }
+                .map { faceOf(it, Ask.SHOW) }
+            CardKind.KANJI -> KanjiData.of(level)
+                .filter { Srs.inStage(store.get(it.id), stage) }
+                .map { faceOf(it, Ask.SHOW) }
         }
     }
-    var i by remember(kind, level, tag) { mutableStateOf(0) }
+    var i by remember(kind, level, tag, stage) { mutableStateOf(0) }
 
     if (cards.isEmpty()) {
         ScreenColumn { EmptyNote("이 범위에는 볼 카드가 없습니다.") }
@@ -383,20 +434,78 @@ private fun ViewScreen(
 
     // 범위가 바뀌는 순간 자리를 되돌리기 전에 그려지면 옛 자리가 새 목록 밖일 수 있다.
     val card = cards[i.coerceIn(0, cards.lastIndex)]
-    val scope = "${level.label} " + if (kind == CardKind.KANJI) "한자" else tag
+    val scope = scopeLabel(level, kind, tag, stage)
+
+    // 점수는 **맨 위 오른쪽 칩에 매달린 드롭다운**으로 놓는다.
+    //
+    // 화면에 펴 두면 「다음」을 연달아 누르는 손끝 바로 위에 열한 칸이 서서, 훑어보다 한 번
+    // 스치면 그 카드 점수가 그 자리에서 바뀐다 — 채점과 달리 여기엔 되돌리는 손이 없다.
+    // 접어 두고 못 박힌 자리에 펴는 것도 같은 자리에 서기 때문에 마찬가지다.
+    //
+    // 떠 있는 판은 카드 위를 덮으므로 넘기는 단추 근처에 아무것도 안 생긴다. 한 줄로
+    // 늘어놓을 이유도 같이 없어져서 칸이 손가락만큼 커진다.
+    var scoring by remember { mutableStateOf(false) }
+    val score = store.get(card.id)?.score
 
     // 단추는 스크롤 밖에 못 박는다. 예문 길이와 이어보기 칩 수 때문에 카드 높이가
     // 장마다 달라서, 안에 두면 한 장 넘길 때마다 「다음」이 손가락 밑에서 도망간다.
     ScreenColumn(header = {
         Column(Modifier.fillMaxWidth()) {
-            Text("$scope · 보기 · ${i + 1} / ${cards.size}", fontSize = 12.sp, color = m.sumi3)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "$scope · 보기 · ${i + 1} / ${cards.size}",
+                    Modifier.weight(1f),
+                    fontSize = 12.sp,
+                    color = m.sumi3
+                )
+                // 접으면 이 카드가 몇 점인지 화면에 남는 데가 없어서, 여닫는 칩이
+                // 지금 점수를 겸한다. 기록이 없으면 숫자 대신 「점수」라고만 적는다 —
+                // 0점을 적어 두면 손도 안 댄 단어가 0점을 받은 것처럼 보인다.
+                // 판에서 「아직」을 누르면 이 칩도 그 글자로 돌아간다.
+                Box {
+                    Box(
+                        Modifier
+                            .pressSurface(
+                                RoundedCornerShape(8.dp),
+                                m.sunk,
+                                onClickLabel = "점수 놓기"
+                            ) { scoring = true }
+                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                    ) {
+                        Text(
+                            (score?.let { "${it}점" } ?: "점수") + if (scoring) " \u25B4" else " \u25BE",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (scoring) m.ai else m.sumi3
+                        )
+                    }
+                    // 칩에 매달아 연다. 자리·바깥 탭 닫기·화면 끝에서 뒤집히는 것까지
+                    // DropdownMenu가 이미 하는 일이라 Popup을 직접 앉히지 않는다.
+                    DropdownMenu(expanded = scoring, onDismissRequest = { scoring = false }) {
+                        // 골랐으면 닫는다. 열린 판이 카드를 덮고 있어서, 놓고 나면
+                        // 볼 것이 그 아래에 있다.
+                        ScoreGrid(
+                            score,
+                            onPick = {
+                                store.setScore(card.id, it)
+                                scoring = false
+                            },
+                            onClear = {
+                                // 기록을 통째로 뺀다. 점수를 0으로 놓는 것과 다르다 —
+                                // 맞음·틀림 횟수와 따라쓰기 기록까지 없어지고 진행
+                                // 막대에서 「아직」으로 돌아간다.
+                                store.reset(card.id)
+                                scoring = false
+                            }
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(6.dp))
             ProgressBar((i + 1).toFloat() / cards.size)
         }
         Spacer(Modifier.height(24.dp))
     }, pinned = {
-        Spacer(Modifier.height(12.dp))
-        ScoreRow(store.get(card.id)?.score) { store.setScore(card.id, it) }
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             GhostButton("\u25C0 이전", { i-- }, Modifier.weight(1f), enabled = i > 0)
@@ -439,43 +548,73 @@ private fun ViewScreen(
 }
 
 /**
- * 점수를 0~[Srs.MASTERED_AT]에서 직접 고르는 줄.
+ * 점수를 직접 고르는 판. 맨 위 오른쪽 칩의 드롭다운 안에 선다.
+ * 맨 앞이 「아직」(`×`)이고 그 뒤가 0~[Srs.MASTERED_AT]다.
  *
- * [score]가 null이면 아무 칸도 안 켜진다. 「아직 안 튼 카드」와 「0점을 준 카드」는
- * 눈으로 갈려야 한다 — 0을 켜 두면 손도 안 댄 단어가 전부 0점을 받은 것처럼 보인다.
+ * **넉 칸씩 세 줄이다.** 한 줄로 늘어놓으면 칸 하나가 손가락보다 좁아지는데, 화면에
+ * 못 박힌 줄일 때는 세로를 키워 그걸 메웠다. 떠 있는 판은 너비가 내용대로 잡히므로
+ * 대신 줄을 접어서 칸을 키운다 — 한 줄로 두면 판이 화면 너비를 넘는다.
  *
- * 열한 칸이라 칸 하나가 손가락보다 좁다. 대신 세로를 키워 자판 한 줄만 한 크기로
- * 맞춘다 — 두 줄로 접으면 못 박힌 자리가 그만큼 자라 카드가 밀린다.
+ * **「아직」 칸이 점수 칸과 한 판에 있다.** 0점을 줄지 아예 안 튼 것으로 둘지는 카드를
+ * 보면서 한 번에 고르는 판단이라 손을 두 군데 두지 않는다. 0점은 「배웠는데 아직
+ * 못 외운 카드」이고 「아직」은 「손도 안 댄 카드」다 — 진행 막대의 다른 칸이며,
+ * 0점 카드는 「익히는 중」에 서서 복습에 계속 나온다.
+ *
+ * 이 칸이 서면서 **[score]가 null인 상태에 켜지는 자리가 생겼다.** 예전에는 아무 칸도
+ * 안 켜지는 것이 「아직 안 튼 카드」의 표시였는데, 그건 없음으로 있음을 말하는 것이라
+ * 점수가 판 밖(문턱 위)인 카드와 구별되지 않았다. 이제 안 켜짐은 그 하나만 뜻한다.
  */
 @Composable
-private fun ScoreRow(score: Int?, onPick: (Int) -> Unit) {
-    val m = LocalMasu.current
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-        (0..Srs.MASTERED_AT).forEach { n ->
-            val on = n == score
-            Box(
-                Modifier
-                    .weight(1f)
-                    .pressSurface(
-                        RoundedCornerShape(8.dp),
-                        if (on) m.ai else m.card,
-                        BorderStroke(1.dp, if (on) m.ai else m.rule),
-                        onClickLabel = "${n}점 주기"
-                    ) { onPick(n) }
-                    .padding(vertical = 13.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "$n",
-                    fontSize = 12.sp,
-                    fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
-                    color = when {
-                        on && m.dark -> Color(0xFF0F1114)
-                        on -> Color.White
-                        else -> m.sumi2
-                    }
-                )
+private fun ScoreGrid(score: Int?, onPick: (Int) -> Unit, onClear: () -> Unit) {
+    Column(
+        Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        // 「아직」을 앞에 세우면 열두 칸이라 넉 칸씩 딱 세 줄로 맞는다. 그래도 빈 자리를
+        // 끼우는 줄은 남긴다 — 문턱이 바뀌면 마지막 줄이 다시 짧아진다.
+        val cells: List<Int?> = listOf(null) + (0..Srs.MASTERED_AT)
+        cells.chunked(SCORE_COLS).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                row.forEach { n ->
+                    ScoreCell(n, n == score) { if (n == null) onClear() else onPick(n) }
+                }
+                repeat(SCORE_COLS - row.size) { Spacer(Modifier.size(SCORE_CELL)) }
             }
         }
+    }
+}
+
+private const val SCORE_COLS = 4
+private val SCORE_CELL = 44.dp
+
+/**
+ * 점수 한 칸. 켜진 칸은 [Masu.ai]로 칠하고 글자를 바탕색으로 뒤집는다.
+ * [n]이 null이면 「아직」 칸이라 숫자 대신 `×`를 찍는다.
+ */
+@Composable
+private fun ScoreCell(n: Int?, on: Boolean, onPick: () -> Unit) {
+    val m = LocalMasu.current
+    Box(
+        Modifier
+            .size(SCORE_CELL)
+            .pressSurface(
+                RoundedCornerShape(8.dp),
+                // 드롭다운 바탕이 m.card라 안 켜진 칸을 같은 색으로 두면 테두리만 남는다.
+                if (on) m.ai else m.sunk,
+                BorderStroke(1.dp, if (on) m.ai else m.rule),
+                onClickLabel = if (n == null) "아직으로 되돌리기" else "${n}점 주기"
+            ) { onPick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            n?.toString() ?: "\u00D7",
+            fontSize = 14.sp,
+            fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal,
+            color = when {
+                on && m.dark -> Color(0xFF0F1114)
+                on -> Color.White
+                else -> m.sumi2
+            }
+        )
     }
 }

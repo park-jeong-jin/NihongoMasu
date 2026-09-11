@@ -46,11 +46,15 @@ fun KanaFlow(
 ) {
     var script by remember { mutableStateOf(Script.HIRA) }
 
+    // 서체를 단계로 한 번 더 좁혔나. null이면 안 좁힌 것이라 그 서체 전부다.
+    var stage by remember { mutableStateOf<Stage?>(null) }
+
     if (practicing) {
-        KanaPractice(store, speaker, script, onClose)
+        KanaPractice(store, speaker, script, stage, onClose)
     } else {
-        KanaScopeMenu(store) {
-            script = it
+        KanaScopeMenu(store) { sc, st ->
+            script = sc
+            stage = st
             onOpen()
         }
     }
@@ -69,12 +73,18 @@ private fun KanaPractice(
     store: Store,
     speaker: Speaker,
     script: Script,
+    stage: Stage?,
     onClose: () -> Unit
 ) {
     val pool = remember {
         KanaData.all.flatMap { k -> KanaAsk.entries.map { KanaCard(k, it) } }
     }
-    val session = rememberQuizSession(store, { c: KanaCard -> c.kana.id(script) }) { pool }
+    // 필터는 통을 만드는 remember 안이 아니라 세션이 부르는 람다 안에 둔다.
+    // rebuild가 이 람다를 다시 부르므로 「한 바퀴 더」에서 단계가 새로 걸린다 —
+    // 방금 익힌 글자는 「아직」 판에서 빠지고 그다음 글자가 올라온다.
+    val session = rememberQuizSession(store, { c: KanaCard -> c.kana.id(script) }) {
+        pool.filter { Srs.inStage(store.get(it.kana.id(script)), stage) }
+    }
 
     val romaji = remember { RomajiState() }
     val dictation = remember { DictationState() }
@@ -86,11 +96,21 @@ private fun KanaPractice(
     }
 
     fun rebuild() {
-        session.rebuild()
+        // 「아직」 판만 판 크기를 좁힌다 — 이유는 Srs.freshRoom에 적어 뒀다.
+        // 세는 범위는 걸러내기 전의 서체 전체다.
+        if (stage == Stage.NEW) {
+            session.rebuild(
+                limit = Srs.freshRoom(
+                    store.settings.batch,
+                    store.settings.learningCap,
+                    store.countLearning(KanaData.all.map { it.id(script) })
+                )
+            )
+        } else session.rebuild()
         clearCard()
     }
 
-    LaunchedEffect(script) { rebuild() }
+    LaunchedEffect(script, stage) { rebuild() }
 
     ScreenColumn {
         if (session.done) {
@@ -100,11 +120,11 @@ private fun KanaPractice(
 
         val card = session.card
         if (card == null) {
-            NothingDue(store)
+            NothingDue(store, stage)
             return@ScreenColumn
         }
 
-        QuizHeader(session, script.label)
+        QuizHeader(session, if (stage == null) script.label else "${script.label} · ${stage.label}")
 
         when (card.ask) {
             KanaAsk.ROMAJI ->
@@ -122,18 +142,19 @@ private fun KanaPractice(
  * [Script] 하나를 실어 나르던 곳이 전부 카드 타입으로 바뀐다.
  */
 @Composable
-private fun KanaScopeMenu(store: Store, onPick: (Script) -> Unit) {
+private fun KanaScopeMenu(store: Store, onPick: (Script, Stage?) -> Unit) {
     val m = LocalMasu.current
     ScreenColumn {
         Text(
             "익힐 서체를 고르세요. 청음·탁음·요음을 섞어서 냅니다.\n" +
-                "글자를 보고 로마자를 치는 문제와 소리를 듣고 쓰는 문제가 섞여 나옵니다.",
+                "글자를 보고 로마자를 치는 문제와 소리를 듣고 쓰는 문제가 섞여 나옵니다.\n" +
+                "막대 위 「익힘 · 익히는 중 · 아직」 줄을 누르면 그 단계 글자만 꺼냅니다.",
             fontSize = 13.sp,
             color = m.sumi3,
             modifier = Modifier.padding(top = 4.dp, bottom = 10.dp)
         )
         Script.entries.forEach { sc ->
-            ScopeRow(store, sc.label, KanaData.all.map { it.id(sc) }) { onPick(sc) }
+            ScopeRow(store, sc.label, KanaData.all.map { it.id(sc) }) { st -> onPick(sc, st) }
         }
     }
 }

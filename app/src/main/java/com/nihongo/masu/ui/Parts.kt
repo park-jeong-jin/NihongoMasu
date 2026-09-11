@@ -393,10 +393,13 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
     /**
      * 새 묶음을 깐다. [queue]를 주지 않으면 [Srs.queue]가 점수 낮은 카드부터 뽑는다 —
      * 오답 노트는 이미 걸러 온 목록을 그대로 넘긴다.
+     *
+     * [limit]은 「아직」만 걸러 들어온 판이 [Srs.freshRoom]으로 좁혀 넘긴다. 안 주면
+     * 설정의 묶음 크기다 — 지금까지의 모든 자리가 그쪽이다.
      */
-    fun rebuild(queue: List<T>? = null) {
+    fun rebuild(queue: List<T>? = null, limit: Int = store.settings.batch) {
         val next = queue ?: Srs.queue(
-            pool(), store.settings.batch, store.today(),
+            pool(), limit, store.today(),
             store.settings.fresh, store.settings.learningCap, idOf
         ) { store.get(it) }
         _queue.value = next
@@ -826,6 +829,26 @@ fun RatingRow(onRate: (Rating) -> Unit) {
 internal fun commas(n: Int): String = "%,d".format(n)
 
 /**
+ * 단계 이름과 색. [StageBar]의 글자와 [ScopeRow]의 단계별 줄이 같은 말·같은 색을
+ * 쓰게 한 자리에 둔다 — 두 곳에 따로 적어 두면 이름을 고칠 때 한쪽이 남고, 위아래
+ * 색이 어긋나면 펼친 줄이 막대의 어느 칸인지 알 길이 없다.
+ *
+ * 「막대에서 왼쪽부터」가 아니라 익힘·익히는 중·아직 순이다. 막대 칸 순서와 같다.
+ */
+val Stage.label: String
+    get() = when (this) {
+        Stage.MASTERED -> "익힘"
+        Stage.LEARNING -> "익히는 중"
+        Stage.NEW -> "아직"
+    }
+
+fun Stage.tint(m: MasuColors): Color = when (this) {
+    Stage.MASTERED -> m.ok
+    Stage.LEARNING -> m.gold
+    Stage.NEW -> m.shu
+}
+
+/**
  * 진행 막대. 익힘(초록) · 익히는 중(노랑) · 아직(빨강) 세 칸이고, 막대 바로 위에
  * 칸과 같은 색으로 장수를 적는다.
  *
@@ -853,11 +876,16 @@ fun StageBar(counts: Map<Stage, Int>, total: Int, modifier: Modifier = Modifier)
     Column(modifier) {
         Text(
             buildAnnotatedString {
-                withStyle(SpanStyle(color = m.ok)) { append("익힘 ${commas(done)}") }
-                append("   ")
-                withStyle(SpanStyle(color = m.gold)) { append("익히는 중 ${commas(doing)}") }
-                append("   ")
-                withStyle(SpanStyle(color = m.shu)) { append("아직 ${commas(yet)}") }
+                listOf(
+                    Stage.MASTERED to done,
+                    Stage.LEARNING to doing,
+                    Stage.NEW to yet
+                ).forEachIndexed { at, (stage, n) ->
+                    if (at > 0) append("   ")
+                    withStyle(SpanStyle(color = stage.tint(m))) {
+                        append("${stage.label} ${commas(n)}")
+                    }
+                }
             },
             fontSize = 10.sp,
             lineHeight = 14.sp
@@ -949,14 +977,23 @@ fun EmptyNote(message: String) {
  * 보이고 설정 화면의 상한 설명이 맡는다.
  */
 @Composable
-fun NothingDue(store: Store) {
+fun NothingDue(store: Store, stage: Stage? = null) {
     val s = store.settings
     EmptyNote(
-        if (s.fresh == 0)
-            "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈고, 설정에서 새 카드를 0장으로 둬서 " +
-                "새 단어가 나오지 않습니다."
-        else
-            "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈습니다. 자정이 지나면 다시 오릅니다."
+        when {
+            // 「아직」만 골라 들어왔으면 오늘 몫과 상관이 없다. 자정이 지나도 안 오르고,
+            // 손에 쥔 카드를 익혀서 자리를 비워야 나온다 — 그걸 말해 주지 않으면
+            // 「오늘 몫을 다 끝냈습니다」가 거짓이 된다.
+            stage == Stage.NEW ->
+                "지금 낼 새 카드가 없습니다.\n익히는 중인 카드가 이미 상한 " +
+                    "${s.learningCap}장입니다. 그것들을 익히면 자리가 비어 새 단어가 " +
+                    "나옵니다 — 상한은 설정에서 바꿉니다."
+            s.fresh == 0 ->
+                "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈고, 설정에서 새 카드를 0장으로 둬서 " +
+                    "새 단어가 나오지 않습니다."
+            else ->
+                "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈습니다. 자정이 지나면 다시 오릅니다."
+        }
     )
 }
 
@@ -1233,24 +1270,37 @@ fun CycleDone(session: QuizSession<*>, onClose: () -> Unit, onMore: () -> Unit) 
 /**
  * 학습 범위 한 줄. 기능의 첫 화면에서 "무엇을 연습할지"를 고르는 데 쓴다.
  * 범위에 속한 카드 [ids]로 진행 상황을 그 자리에서 계산해 보여준다.
+ *
+ * **막대의 글자 줄을 누르면 단계별로 펼친다.** [onPick]에 그 [Stage]가 실려 나가고,
+ * 카드 본문을 누르면 지금까지처럼 null — 안 좁힌 범위 전체다. 진행 막대가 이미 세
+ * 칸의 장수를 세어 놓고도 누를 수 없어서, 「아직 810장」을 보고도 그 810장만 꺼낼
+ * 길이 없던 것을 메운다.
+ *
+ * 손잡이를 따로 두지 않고 글자 줄 자체가 손잡이다. 누르는 것이 곧 그 숫자들이라
+ * 무엇이 펼쳐질지 설명할 것이 없다. 카드 안의 클릭이 바깥 클릭을 삼키므로 여기를
+ * 눌러도 범위로 들어가지 않는다.
  */
 @Composable
 fun ScopeRow(
     store: Store,
     title: String,
     ids: List<String>,
-    onClick: () -> Unit
+    onPick: (Stage?) -> Unit
 ) {
     val m = LocalMasu.current
     val stages = store.countStages(ids)
     val due = store.countTodo(ids)
     val weak = store.countWeak(ids)
 
+    // 펼침은 기억하지 않는다. 범위를 고르고 들어가는 자리라 다음에 올 때까지
+    // 이어질 값이 아니고, 기억하면 화면을 열 때마다 카드 높이가 달라진다.
+    var open by remember { mutableStateOf(false) }
+
     Column(
         Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
-            .pressSurface(RoundedCornerShape(14.dp), m.card) { onClick() }
+            .pressSurface(RoundedCornerShape(14.dp), m.card) { onPick(null) }
             .padding(14.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1278,6 +1328,80 @@ fun ScopeRow(
             Text("›", fontSize = 20.sp, color = m.sumi3)
         }
         Spacer(Modifier.height(10.dp))
-        StageBar(stages, ids.size)
+        // **손잡이는 글자로 말하되 줄을 새로 쓰지 않는다.**
+        //
+        // 화살표만 뒀을 때는 10sp 글자 줄에 붙은 작은 기호라 눌러도 되는 줄을 못
+        // 알아봤고, 알약 바탕을 깔아 봐도 카드 안에 어중간한 단추가 하나 앉은 꼴이
+        // 됐다. 전폭 한 줄로 키우면 알아보기는 하는데 **카드마다 40dp가 붙어** 분류가
+        // 열 줄인 등급에서 목록이 그만큼 길어진다.
+        //
+        // 그래서 이미 있는 막대 글자 줄의 오른쪽 끝을 쓴다. 「단계별」이라는 말이
+        // 서니 기호를 찾을 일이 없고, 줄을 안 늘리니 카드 높이도 그대로다.
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .pressSurface(
+                    RoundedCornerShape(8.dp),
+                    onClickLabel = if (open) "단계별 접기" else "단계별 펼치기"
+                ) { open = !open }
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            StageBar(stages, ids.size, Modifier.weight(1f))
+            Spacer(Modifier.width(10.dp))
+            // 최소 폭을 잡고 오른쪽에 붙인다. 글자 그대로 두면 「펼치기」와 「접기」의
+            // 한 글자 차이만큼 단추가 여닫을 때마다 좌우로 움직인다 — 누른 자리가
+            // 손 밑에서 미끄러지는 것으로 보인다. 자르지 않고 최소만 주는 이유는
+            // 기기 글꼴을 키워 둔 사람에게는 이 글자도 같이 커지기 때문이다.
+            Text(
+                if (open) "접기 \u25B4" else "펼치기 \u25BE",
+                Modifier.widthIn(min = 56.dp),
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = m.ai,
+                textAlign = TextAlign.End,
+                maxLines = 1
+            )
+        }
+        if (open) {
+            // 펼친 줄을 카드 바탕 위에 그냥 얹으면 막대 위 글자 줄과 구별이 안 돼서
+            // **펼쳐졌는지 아닌지가 안 보인다.** 가라앉은 바탕과 테두리로 판을 하나
+            // 세우고, 장수를 다시 적는다 — 막대 위와 같은 숫자지만 그쪽은 10sp 한
+            // 덩어리라 손이 어느 줄에 있는지를 말해 주지 못한다.
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(m.sunk)
+                    .border(BorderStroke(1.dp, m.rule), RoundedCornerShape(10.dp))
+            ) {
+                // 0장인 단계는 아예 안 그린다 — 누르면 빈 판이 깔릴 줄이다.
+                //
+                // 아직 → 익히는 중 → 익힘 순이다. 막대는 익힘부터 왼쪽에 그리지만,
+                // 여기서 손이 제일 자주 가는 것은 「아직」이라 맨 위에 둔다.
+                val shown = Stage.entries.filter { (stages[it] ?: 0) > 0 }
+                shown.forEachIndexed { at, stage ->
+                    if (at > 0) HorizontalDivider(color = m.ruleSoft)
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .pressSurface(onClickLabel = "${stage.label} 카드만") { onPick(stage) }
+                            .padding(horizontal = 12.dp, vertical = 11.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            stage.label,
+                            Modifier.weight(1f),
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = stage.tint(m)
+                        )
+                        Text(commas(stages[stage] ?: 0), fontSize = 13.sp, color = m.sumi2)
+                        Spacer(Modifier.width(10.dp))
+                        Text("\u203A", fontSize = 18.sp, color = m.sumi3)
+                    }
+                }
+            }
+        }
     }
 }

@@ -205,6 +205,32 @@ object Srs {
         else -> Stage.NEW
     }
 
+    /**
+     * [stage]로 좁힌 범위에 이 카드가 드나. null이면 안 좁힌 것이라 다 든다.
+     *
+     * 범위를 고르는 화면이 단계별로도 들어올 수 있게 두는 문이다. 등급·분류와 같은
+     * 축이라 [queue]에 인자로 넣지 않고 넘겨줄 목록을 걸러서 쓴다 — [stageOf]는
+     * 표시 전용이고, 점수 계산에 단계를 들이면 그 선이 무너진다.
+     */
+    fun inStage(rec: Rec?, stage: Stage?): Boolean = stage == null || stageOf(rec) == stage
+
+    /**
+     * [Stage.NEW]만 걸러 들어온 판의 크기. 상한에서 지금 손에 쥔 장수를 뺀 만큼이다.
+     *
+     * [queue]의 [DEFAULT_LEARNING_CAP]은 **넘겨준 목록 안에서** 익히는 중 카드를
+     * 세는데, 「아직」만 걸러 넣으면 그 수가 정의상 0이라 문이 영영 안 닫힌다. 게다가
+     * 그 판에는 복습 카드가 하나도 없어서 「한쪽이 모자라면 남은 자리는 다른 쪽이
+     * 받는다」가 걸려 새 카드가 묶음을 통째로 채운다 — 누를 때마다 스무 장씩, 끝없이.
+     *
+     * 그래서 부르는 쪽에서 판을 미리 자른다. [queue]를 고쳐 새 카드 채우기를 상한으로
+     * 막으면 등급·분류로 들어온 판까지 같이 좁아진다 — 그쪽은 상한을 문으로 쓰는 게
+     * 맞다. 자리가 하나 비면 몫이 통째로 나오는 한 번짜리 넘침은 끝이 있다.
+     *
+     * 0이면 판을 안 깐다. 손에 쥔 것이 이미 상한이니 새로 틀 자리가 없다는 뜻이다.
+     */
+    fun freshRoom(batch: Int, learningCap: Int, learning: Int): Int =
+        minOf(batch, learningCap - learning).coerceAtLeast(0)
+
     /** 맞힌 횟수보다 틀린 횟수가 많고 두 번 이상 틀린 카드 = 약한 카드. */
     fun isWeak(rec: Rec?): Boolean = rec != null && rec.ng >= 2 && rec.ng > rec.ok
 

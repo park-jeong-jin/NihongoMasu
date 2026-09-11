@@ -55,6 +55,48 @@ class SrsTest {
         assertFalse("기록이 없는 카드는 손에 쥔 것도 아니다", Srs.isLearning(null))
     }
 
+    @Test fun `단계 필터는 null이면 다 통과시키고 아니면 그 단계만 남긴다`() {
+        val fresh = null
+        val learning = Rec(score = 3, ok = 3)
+        val mastered = Rec(score = Srs.MASTERED_AT, ok = 10)
+
+        // null은 안 좁힌 것이다 — 등급·분류만 고르고 들어온 지금까지의 길.
+        for (r in listOf(fresh, learning, mastered)) assertTrue(Srs.inStage(r, null))
+
+        assertTrue(Srs.inStage(fresh, Stage.NEW))
+        assertFalse(Srs.inStage(learning, Stage.NEW))
+        assertFalse(Srs.inStage(mastered, Stage.NEW))
+
+        assertTrue(Srs.inStage(learning, Stage.LEARNING))
+        assertFalse(Srs.inStage(fresh, Stage.LEARNING))
+
+        assertTrue(Srs.inStage(mastered, Stage.MASTERED))
+        assertFalse(Srs.inStage(learning, Stage.MASTERED))
+
+        // 막대와 어긋날 자리가 없어야 한다. 같은 [Srs.stageOf]를 쓰는지 확인한다.
+        for (r in listOf(fresh, learning, mastered)) {
+            assertTrue(Srs.inStage(r, Srs.stageOf(r)))
+        }
+    }
+
+    @Test fun `아직 판은 상한에서 손에 쥔 장수를 뺀 만큼만 깐다`() {
+        // 상한 20에 손에 쥔 것이 18장이면 새로 틀 자리는 두 장뿐이다.
+        assertEquals(2, Srs.freshRoom(batch = 20, learningCap = 20, learning = 18))
+
+        // 손이 비어 있으면 묶음 크기가 그대로 한도다.
+        assertEquals(20, Srs.freshRoom(batch = 20, learningCap = 20, learning = 0))
+
+        // 묶음이 상한보다 작으면 묶음이 이긴다 — 한 자리에 낼 장수는 묶음 크기다.
+        assertEquals(5, Srs.freshRoom(batch = 5, learningCap = 20, learning = 0))
+
+        // 상한에 닿았으면 0이다. 판을 안 깔고 「손에 쥔 것이 이미 상한」이라고 말한다.
+        assertEquals(0, Srs.freshRoom(batch = 20, learningCap = 20, learning = 20))
+
+        // 넘겨 쥐고 있어도 음수로 안 내려간다 — 자리가 하나 비면 몫이 통째로 나오는
+        // 한 번짜리 넘침 때문에 상한을 넘긴 상태가 실제로 생긴다.
+        assertEquals(0, Srs.freshRoom(batch = 20, learningCap = 20, learning = 24))
+    }
+
     @Test fun `약한 카드는 두 번 이상 틀렸고 틀린 쪽이 더 많은 것만`() {
         assertFalse(Srs.isWeak(null))
         assertFalse(Srs.isWeak(Rec(ng = 1, ok = 0)))       // 한 번뿐
