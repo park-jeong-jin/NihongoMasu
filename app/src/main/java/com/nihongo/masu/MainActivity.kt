@@ -1,6 +1,8 @@
 package com.nihongo.masu
 
+import android.content.res.Configuration
 import android.graphics.Color.TRANSPARENT
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -8,11 +10,26 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.graphics.toArgb
 import com.nihongo.masu.data.Store
 import com.nihongo.masu.data.ThemeMode
 import com.nihongo.masu.tts.Speaker
 import com.nihongo.masu.ui.App
+import com.nihongo.masu.ui.DarkMasu
+import com.nihongo.masu.ui.LightMasu
 import com.nihongo.masu.ui.MasuTheme
+
+/**
+ * 화면을 어둡게 그릴지. 설정이 [ThemeMode.SYSTEM]일 때만 기기를 따른다.
+ *
+ * 창 배경과 컴포즈 테마와 상태바 아이콘이 **같은 값**을 봐야 한다. 세 군데가 저마다
+ * 기기 다크 모드를 읽으면 설정으로 고정해 둔 사람에게서 셋이 따로 논다.
+ */
+private fun isDark(theme: ThemeMode, systemDark: Boolean): Boolean = when (theme) {
+    ThemeMode.SYSTEM -> systemDark
+    ThemeMode.LIGHT -> false
+    ThemeMode.DARK -> true
+}
 
 class MainActivity : ComponentActivity() {
 
@@ -25,15 +42,30 @@ class MainActivity : ComponentActivity() {
         val store = Store(applicationContext)
         speaker = Speaker(applicationContext)
 
+        /*
+         * 창 배경을 **앱이 고른 테마**로 덮는다.
+         *
+         * `themes.xml`의 `windowBackground`는 리소스 한정자(`values-night`)가 고르므로
+         * 기기 다크 모드만 본다. 앱 테마는 설정이 정하니, 기기가 어두운데 앱만 밝게
+         * 두면 컴포즈가 첫 화면을 그리기 전까지 어두운 배경이 깔려 있다가 뒤집힌다.
+         *
+         * 색은 `themes.xml`에 적힌 것과 같은 값을 팔레트에서 가져온다 — 세 번째로
+         * 적어 두면 팔레트를 고칠 때 이 줄만 남는다.
+         *
+         * 돌아가는 중에 설정을 바꾸는 것은 여기서 안 본다. 그때는 컴포즈가 이미 화면을
+         * 덮고 있어 창 배경이 보일 자리가 없고, `configChanges`가 회전·다크 모드를
+         * 받아 두어 액티비티가 다시 만들어지지도 않는다. 다음에 켤 때 여기서 읽는다.
+         */
+        val systemDark = resources.configuration.uiMode and
+            Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val paper = if (isDark(store.settings.theme, systemDark)) DarkMasu.paper else LightMasu.paper
+        window.setBackgroundDrawable(ColorDrawable(paper.toArgb()))
+
         setContent {
-            val dark = when (store.settings.theme) {
-                ThemeMode.SYSTEM -> isSystemInDarkTheme()
-                ThemeMode.LIGHT -> false
-                ThemeMode.DARK -> true
-            }
+            val dark = isDark(store.settings.theme, isSystemInDarkTheme())
 
             /*
-             * 상태바·내비바 아이콘 색을 **앱이 고른 테마**에 맞춘다.
+             * 상태바·내비바 아이콘 색을 앱이 고른 테마에 맞춘다.
              *
              * 위의 `enableEdgeToEdge()`를 인자 없이 부르면 그 색을 기기 다크 모드를
              * 보고 정한다. 그런데 앱 테마는 설정이 따로 정해서, 기기가 어두운데
