@@ -409,7 +409,10 @@ private fun ReviewPractice(
             if (!revealed) {
                 PrimaryButton("정답 확인", { revealed = true }, Modifier.fillMaxWidth())
             } else {
-                RatingRow { answer(it) }
+                RatingRow(
+                    row.rec,
+                    { if (answer(Rating.GOOD)) store.challenge(row.id) }
+                ) { answer(it) }
             }
         }
     }) {

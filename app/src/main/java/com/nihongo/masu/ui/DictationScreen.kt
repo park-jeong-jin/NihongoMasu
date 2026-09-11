@@ -219,7 +219,10 @@ fun DictationCard(
             )
             Spacer(Modifier.height(8.dp))
 
-            RatingRow { answer(it) }
+            RatingRow(
+                store.get(kana.id(script)),
+                { if (answer(Rating.GOOD)) store.challenge(kana.id(script)) }
+            ) { answer(it) }
             Spacer(Modifier.height(8.dp))
             GhostButton("다시 쓰기", { state.clear() }, Modifier.fillMaxWidth())
         }

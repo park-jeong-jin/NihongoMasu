@@ -10,10 +10,17 @@ package com.nihongo.masu.data
  * @param fail 마지막 답이 못 넘긴 등급이었나
  * @param traced 따라쓰기 연습 횟수
  * @param best  모양 비교 최고 점수 0..100
+ * @param hold  이 날([Srs.isHeld])까지 복습에 안 낸다. 0이면 없음
+ * @param step  챌린지 사다리 칸. [Srs.CHALLENGE_DAYS]의 몇 번째까지 올라왔나
  *
- * **「복습일」 칸은 없다.** 날짜로 간격을 재지 않는다 — [Srs.queue]가 점수 낮은 순으로
- * 내므로 점수가 그대로 「덜 나옴」이고, 점수가 하루 한 번만 오르는 것이 간격을 만든다.
- * 사다리 끝에서 멈추지도 않아서 잘 아는 카드는 저절로 통 뒤로 밀려난다.
+ * **자동으로 도는 「복습일」 칸은 없다.** 날짜로 간격을 재지 않는다 — [Srs.queue]가
+ * 점수 낮은 순으로 내므로 점수가 그대로 「덜 나옴」이고, 점수가 하루 한 번만 오르는
+ * 것이 간격을 만든다. 사다리 끝에서 멈추지도 않아서 잘 아는 카드는 저절로 통 뒤로
+ * 밀려난다.
+ *
+ * [hold]는 그 규칙의 예외가 아니라 **손으로 놓는 값**이다. 익힘에 오른 카드에만
+ * 단추가 서고, 누르는 사람이 「며칠 치워라」라고 말할 때만 찬다 ([Srs.challenge]).
+ * 날짜가 저절로 걸리는 자리는 여전히 없다.
  *
  * [fail] 한 비트가 두 가지를 판정한다 — 익힘 배지([Srs.isMastered])와 「오늘 통과해서
  * 더 안 물어도 되나」([Srs.isDoneToday]). 둘 다 「마지막 답이 통과였나」를 묻는 것이라
@@ -26,7 +33,9 @@ data class Rec(
     val last: Long = 0L,
     val fail: Boolean = false,
     val traced: Int = 0,
-    val best: Int = 0
+    val best: Int = 0,
+    val hold: Long = 0L,
+    val step: Int = 0
 )
 
 /**
@@ -191,7 +200,12 @@ object Srs {
             ok = if (rating.pass) rec.ok + 1 else rec.ok,
             ng = if (rating.pass) rec.ng else rec.ng + 1,
             fail = !rating.pass,
-            last = today
+            last = today,
+            // 못 넘긴 등급은 챌린지 사다리를 **처음으로** 되돌리고 치워 둔 것도 푼다.
+            // 실패하면 처음부터인 것이 이 사다리의 규칙이고, 30일을 버티다 한 번 막힌
+            // 카드를 다시 30일 치워 두면 그 한 번이 아무 뜻이 없다.
+            step = if (rating.pass) rec.step else 0,
+            hold = if (rating.pass) rec.hold else 0L
         )
     }
 
@@ -208,9 +222,14 @@ object Srs {
      * [Rec.ok]·[Rec.ng]·[Rec.last]는 안 건드린다. 실제로 답한 것이 아니라 맞음·틀림에
      * 셀 것이 없고, `last`를 오늘로 밀면 [isDoneToday]가 서서 훑어보기만 한 카드가
      * 오늘 복습에서 빠진다.
+     *
+     * **챌린지로 치워 둔 것은 푼다.** 판이 0~[MASTERED_AT]뿐이라 여기서 놓는 점수는
+     * 늘 문턱 아래거나 문턱이고, 그런 카드를 30일씩 치워 둘 이유가 없다. 사다리 끝까지
+     * 올려 복습에서 뺀 카드를 **다시 불러오는 길**도 이 자리다 — 오답 노트 `전체`나
+     * 찾기로 카드를 만나 「보기」에서 점수를 놓으면 돌아온다.
      */
     fun setScore(rec: Rec, score: Int): Rec =
-        rec.copy(score = score.coerceIn(0, MASTERED_AT), fail = false)
+        rec.copy(score = score.coerceIn(0, MASTERED_AT), fail = false, hold = 0L, step = 0)
 
     /** 따라쓰기 연습을 한 번 기록한다. 점수가 오르면 최고점을 갱신한다. */
     fun trace(rec: Rec, score: Int, today: Long): Rec =
@@ -275,6 +294,59 @@ object Srs {
      */
     fun freshRoom(batch: Int, learningCap: Int, learning: Int): Int =
         minOf(batch, learningCap - learning).coerceAtLeast(0)
+
+    // ── 챌린지 사다리 ──
+
+    /**
+     * 「N일 동안 안 보기」의 사다리. 누를 때마다 한 칸 오르고, 마지막 칸을 넘으면
+     * 복습에서 아예 뺀다.
+     *
+     * **익힘([MASTERED_AT])에 오른 카드에만 단추가 선다.** 익힘 전에 걸면 익힘까지
+     * 걸리는 날수가 그만큼 늘어난다 — 처리량은 `min(익히는 중 상한, 묶음 크기) ÷
+     * 카드당 답 횟수`라 분모가 커지는 만큼 하루에 떼는 장수가 깎인다. 여기서는
+     * 분모를 안 건드린다.
+     *
+     * 익힘 뒤는 반대로 **비어 있던 자리**다. 큐가 점수 낮은 순으로 내니 익힘 카드는
+     * 늘 통 뒤로 밀려서, 통이 크면 한 번 오른 카드를 다시 물을 자리가 사실상 안 온다.
+     * 사다리는 그 카드를 「지금은 빼되 N일 뒤엔 도로 넣는다」로 바꾼다.
+     *
+     * 3·7·14·30은 두 배씩 벌리되 한 달에서 멈춘 것이다. 계속 두 배로 가면 다섯 칸째가
+     * 넉 달이라, 시험처럼 끝이 정해진 공부에서는 그 카드를 다시 볼 날이 시험 뒤가 된다.
+     */
+    val CHALLENGE_DAYS = listOf(3, 7, 14, 30)
+
+    /** 사다리 끝. 다시 안 낸다 — [isHeld]가 영영 참이 되도록 이 값을 [Rec.hold]에 둔다. */
+    const val FOREVER = Long.MAX_VALUE
+
+    /**
+     * 지금 복습에 낼 수 없게 치워 둔 카드인가.
+     *
+     * 걸러내는 자리는 [round]와 [queue] 둘뿐이다. 오답 노트의 조건 갈래
+     * (`자주 틀림` · `틀린 적` · `전체`)는 안 본다 — 「기록이 이런 카드를 다 보여
+     * 달라」는 목록이라 치워 둔 카드도 거기서는 보여야 하고, **빼 둔 카드를 손으로
+     * 다시 만나는 길**이 그 목록이다.
+     */
+    fun isHeld(rec: Rec?, today: Long): Boolean = rec != null && rec.hold > today
+
+    /**
+     * 다음에 단추를 누르면 며칠을 쉬나. null이면 마지막 칸이라 복습에서 뺀다.
+     * 화면이 단추에 적을 말을 여기서 받는다.
+     */
+    fun nextChallenge(rec: Rec?): Int? = CHALLENGE_DAYS.getOrNull(rec?.step ?: 0)
+
+    /**
+     * 사다리를 한 칸 올리고 그만큼 치운다. 마지막 칸을 넘으면 [FOREVER]다.
+     *
+     * 점수는 안 건드린다 — 이 단추는 채점이 아니라 채점 **위에** 얹는 말이다.
+     * 부르는 쪽([Store.challenge])이 「보통」으로 먼저 채점하고 그 결과에 이것을 건다.
+     */
+    fun challenge(rec: Rec, today: Long): Rec {
+        val days = nextChallenge(rec)
+        return rec.copy(
+            step = rec.step + 1,
+            hold = if (days == null) FOREVER else today + days
+        )
+    }
 
     /** 맞힌 횟수보다 틀린 횟수가 많고 두 번 이상 틀린 카드 = 약한 카드. */
     fun isWeak(rec: Rec?): Boolean = rec != null && rec.ng >= 2 && rec.ng > rec.ok
@@ -365,7 +437,7 @@ object Srs {
         recOf: (String) -> Rec?
     ): List<String> =
         ids.mapNotNull { id -> recOf(id)?.let { id to it } }
-            .filterNot { isDoneToday(it.second, today) }
+            .filterNot { isDoneToday(it.second, today) || isHeld(it.second, today) }
             .sortedWith(compareBy({ it.second.score }, { it.second.last }))
             .take(limit.coerceAtLeast(0))
             .map { it.first }
@@ -413,6 +485,9 @@ object Srs {
                 fresh.add(item)
                 continue
             }
+            // 챌린지로 치워 둔 카드는 아예 안 담는다. 익힘 뒤에만 걸리므로
+            // 아래 익히는 중 상한에는 닿지 않는다 — 세기 전에 빠져도 수가 같다.
+            if (isHeld(r, today)) continue
             if (isLearning(r)) learning++
             if (isDoneToday(r, today)) done.add(item to r) else todo.add(item to r)
         }

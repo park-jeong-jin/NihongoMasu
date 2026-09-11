@@ -469,19 +469,26 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
         )
     }
 
-    /** [record] 뒤에 결과 색을 띄우고, 색이 걷히면 다음 카드로 넘어간다. */
+    /**
+     * [record] 뒤에 결과 색을 띄우고, 색이 걷히면 다음 카드로 넘어간다.
+     *
+     * 채점 색이 떠 있는 동안 또 누르면 **아무것도 안 하고 false**를 준다. 그 값을
+     * 보는 곳은 「N일 동안 안 보기」 단추다 — 그쪽은 채점 위에 사다리를 한 칸 더
+     * 얹으므로, 빠르게 두 번 눌렸을 때 안 올라간 채점 위에 칸만 두 번 오르면 안 된다.
+     */
     fun grade(
         rating: Rating,
         traceScore: Int? = null,
         restore: () -> Unit = {},
         then: () -> Unit = {}
-    ) {
-        if (verdict.correct != null) return
+    ): Boolean {
+        if (verdict.correct != null) return false
         record(rating, traceScore, restore)
         verdict.mark(rating.pass) {
             advance()
             then()
         }
+        return true
     }
 
     /** 되돌리기 단추. 기록과 화면 자리를 나란히 되돌린다. */
@@ -826,8 +833,13 @@ fun QuizHeader(session: QuizSession<*>, label: String) {
  * 기본 단추 여백(가로 24dp)으로는 넷이 들어가면 세 글자가 잘린다.
  */
 @Composable
-fun RatingRow(onRate: (Rating) -> Unit) {
+fun RatingRow(
+    rec: Rec? = null,
+    onChallenge: (() -> Unit)? = null,
+    onRate: (Rating) -> Unit
+) {
     val m = LocalMasu.current
+    if (onChallenge != null) ChallengeButton(rec, onChallenge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Rating.entries.forEach { r ->
             GhostButton(
@@ -844,6 +856,53 @@ fun RatingRow(onRate: (Rating) -> Unit) {
             )
         }
     }
+}
+
+/**
+ * 「N일 동안 안 보기」 — 익힘에 오른 카드에만 서는 챌린지 단추.
+ *
+ * **채점 줄 위에 따로 한 줄로 선다.** 다섯째 칸으로 끼워 넣으면 네 등급이 그만큼
+ * 좁아져 글자가 잘리고, 무엇보다 **등급이 아니다** — 「얼마나 잘 떠올렸나」를 고르는
+ * 줄에 「며칠 치워라」가 끼면 고르는 것이 무엇인지가 흐려진다. 누르면 「보통」으로
+ * 채점하고 그 위에 사다리를 얹는다 ([Store.challenge]).
+ *
+ * 익힘이 아닌 카드에는 아무것도 안 그린다. 자리를 비워 두지도 않는다 — 못 누르는
+ * 단추가 회색으로 서 있으면 채점 줄이 카드마다 위아래로 움직인다.
+ *
+ * 오른쪽에 사다리를 옅게 적는다(`3 · 7 · 14 · 30 · ∞`, 지금 칸만 진하게). 「3일」만
+ * 적어 두면 이 단추가 한 번짜리 스누즈인지 오르는 사다리인지 알 길이 없다.
+ */
+@Composable
+private fun ChallengeButton(rec: Rec?, onTake: () -> Unit) {
+    if (!Srs.isMastered(rec)) return
+    val m = LocalMasu.current
+    val days = Srs.nextChallenge(rec)
+    val at = rec?.step ?: 0
+
+    GhostButton(
+        if (days == null) "복습에서 빼기" else "${days}일 동안 안 보기",
+        onTake,
+        Modifier.fillMaxWidth(),
+        tint = m.murasaki
+    )
+    Spacer(Modifier.height(4.dp))
+    Text(
+        buildAnnotatedString {
+            val rungs = Srs.CHALLENGE_DAYS.map { "$it" } + "∞"
+            rungs.forEachIndexed { i, r ->
+                if (i > 0) append(" · ")
+                // 지금 누르면 갈 칸만 진하다. 지나온 칸을 진하게 두면 「여기까지 왔다」로
+                // 읽히는데, 실패하면 처음으로 돌아가므로 지나온 자취가 남지 않는다.
+                if (i == at) withStyle(SpanStyle(color = m.murasaki)) { append(r) }
+                else append(r)
+            }
+        },
+        fontSize = 10.sp,
+        color = m.sumi3,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth()
+    )
+    Spacer(Modifier.height(8.dp))
 }
 
 /** 천 단위마다 쉼표. 5429는 한눈에 읽으라고 있는 숫자가 아니다. */

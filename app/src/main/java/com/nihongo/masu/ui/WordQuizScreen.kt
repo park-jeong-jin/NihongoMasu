@@ -305,7 +305,10 @@ private fun WordQuizScreen(
             } else {
                 Text("얼마나 잘 떠올렸는지 골라 주세요", fontSize = 12.sp, color = m.sumi3)
                 Spacer(Modifier.height(8.dp))
-                RatingRow { answer(it) }
+                RatingRow(
+                    store.get(card.id),
+                    { if (answer(Rating.GOOD)) store.challenge(card.id) }
+                ) { answer(it) }
             }
         }
     }) {

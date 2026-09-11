@@ -65,6 +65,7 @@ private const val MAX_SCORE = 1_000_000
 internal fun Rec.toJson(): JSONObject = JSONObject()
     .put("p", score).put("o", ok).put("n", ng)
     .put("l", last).put("f", fail).put("t", traced).put("s", best)
+    .put("h", hold).put("c", step)
 
 /**
  * JSON → 기록 한 줄. 없는 열쇠는 0으로 받는다.
@@ -84,5 +85,9 @@ internal fun JSONObject.toRec(): Rec = Rec(
     last = optLong("l", 0L),
     fail = optBoolean("f", false),
     traced = optInt("t", 0),
-    best = optInt("s", 0)
+    best = optInt("s", 0),
+    // 챌린지로 치워 둔 날과 사다리 칸. 없는 열쇠는 0이라 이 칸이 생기기 전 파일은
+    // 「안 치워 둔 카드」로 들어온다 — 그게 맞는 값이다.
+    hold = optLong("h", 0L),
+    step = optInt("c", 0).coerceAtLeast(0)
 )

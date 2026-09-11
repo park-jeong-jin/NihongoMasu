@@ -595,6 +595,79 @@ class SrsTest {
         assertEquals(0, Round(today, (1..30).map { "c$it" }, at = 30).left)
     }
 
+    // ── 챌린지 사다리 ──
+
+    @Test fun `사다리는 3 7 14 30 무한 순으로 오른다`() {
+        var rec = Rec(score = Srs.MASTERED_AT, ok = 10)
+        val days = mutableListOf<Long>()
+
+        repeat(Srs.CHALLENGE_DAYS.size) {
+            days += Srs.challenge(rec, today).hold - today
+            rec = Srs.challenge(rec, today)
+        }
+        assertEquals(listOf(3L, 7L, 14L, 30L), days)
+
+        // 마지막 칸을 넘으면 복습에서 뺀다. 「며칠」이 아니라 영영이다.
+        assertNull("사다리 끝에서도 날수를 내면 안 된다", Srs.nextChallenge(rec))
+        assertEquals(Srs.FOREVER, Srs.challenge(rec, today).hold)
+    }
+
+    @Test fun `치워 둔 카드는 그날이 올 때까지 복습에 안 나온다`() {
+        val held = Rec(score = Srs.MASTERED_AT, ok = 10, hold = today + 3)
+
+        assertTrue(Srs.isHeld(held, today))
+        assertTrue("치운 날 당일까지는 아직 빠져 있다", Srs.isHeld(held, today + 2))
+        assertFalse("사흘 뒤에는 돌아온다", Srs.isHeld(held, today + 3))
+        assertFalse(Srs.isHeld(Rec(score = 5), today))
+        assertFalse(Srs.isHeld(null, today))
+
+        // 복습에서 뺀 카드는 어느 날을 들이대도 안 돌아온다.
+        assertTrue(Srs.isHeld(held.copy(hold = Srs.FOREVER), today + 100_000))
+    }
+
+    @Test fun `치워 둔 카드는 판에도 큐에도 안 담긴다`() {
+        val recs = mapOf(
+            "치움" to Rec(score = Srs.MASTERED_AT, ok = 10, last = today - 1, hold = today + 3),
+            "뺌" to Rec(score = Srs.MASTERED_AT, ok = 10, last = today - 1, hold = Srs.FOREVER),
+            "그냥" to Rec(score = 4, last = today - 1)
+        )
+        val ids = listOf("치움", "뺌", "그냥")
+
+        assertEquals(listOf("그냥"), Srs.round(ids, 10, today) { recs[it] })
+        assertEquals(listOf("그냥"), Srs.queue(ids, 10, today, 0, cap, { it }) { recs[it] })
+
+        // 치운 날이 지나면 둘 중 하나만 돌아온다.
+        assertEquals(setOf("치움", "그냥"), Srs.round(ids, 10, today + 3) { recs[it] }.toSet())
+    }
+
+    @Test fun `실패하면 사다리가 처음으로 돌아가고 치운 것도 풀린다`() {
+        val far = Rec(score = 30, ok = 30, step = 3, hold = today + 30)
+
+        for (r in listOf(Rating.AGAIN, Rating.HARD)) {
+            val after = Srs.grade(far, r, today)
+            assertEquals("실패하면 처음부터다", 0, after.step)
+            assertEquals("치워 둔 것도 함께 풀린다", 0L, after.hold)
+            assertEquals(3, Srs.nextChallenge(after))
+        }
+
+        // 통과한 등급은 사다리를 안 건드린다 — 올리는 것은 단추뿐이다.
+        for (r in listOf(Rating.GOOD, Rating.EASY)) {
+            val after = Srs.grade(far, r, today)
+            assertEquals(3, after.step)
+            assertEquals(today + 30, after.hold)
+        }
+    }
+
+    @Test fun `손으로 점수를 놓으면 복습에서 뺀 카드가 돌아온다`() {
+        val gone = Rec(score = 30, ok = 30, step = Srs.CHALLENGE_DAYS.size + 1, hold = Srs.FOREVER)
+        val back = Srs.setScore(gone, 6)
+
+        assertEquals(6, back.score)
+        assertEquals(0L, back.hold)
+        assertEquals(0, back.step)
+        assertFalse(Srs.isHeld(back, today))
+    }
+
     @Test fun `히라가나와 가타카나는 서로 다른 카드다`() {
         val kanaIds = KanaData.all.flatMap { k -> Script.entries.map { k.id(it) } }
         assertEquals(KanaData.all.size * 2, kanaIds.size)

@@ -19,7 +19,11 @@ class BackupTest {
 
     private val records = mapOf(
         "あ" to Rec(score = 3, ok = 5, ng = 2, last = 19_996L, fail = true, traced = 4, best = 88),
-        "V食べる:listen" to Rec(score = 12, ok = 9, last = 20_000L)
+        "V食べる:listen" to Rec(score = 12, ok = 9, last = 20_000L),
+        // 챌린지로 치워 둔 카드와 복습에서 뺀 카드. 이 두 칸을 안 담으면 폰을
+        // 바꾼 사람의 사다리가 통째로 처음으로 돌아간다.
+        "J日" to Rec(score = 18, ok = 18, last = 19_990L, step = 2, hold = 20_014L),
+        "J月" to Rec(score = 40, ok = 40, last = 19_900L, step = 5, hold = Srs.FOREVER)
     )
     private val days = listOf(19_998L, 19_999L, 20_000L)
 
