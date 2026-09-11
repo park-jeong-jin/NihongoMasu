@@ -259,7 +259,7 @@ class Store(context: Context) {
 
     /** 지금 깐다면 나올 목록. 아직 안 깔린 판을 **읽기만** 하는 자리가 쓴다. */
     private fun wouldBe(): List<String> =
-        Srs.round(activeCardIds, settings.review, today()) { records[it] }
+        Srs.round(activeCardIds, today()) { records[it] }
 
     /**
      * 오늘 판에 든 카드 열쇠들. 차례가 곧 물을 순서다.
@@ -495,20 +495,21 @@ class Store(context: Context) {
     fun countMastered(ids: List<String>): Int = ids.count { Srs.isMastered(records[it]) }
 
     /**
-     * 오늘 낼 복습 카드 수. **하루 몫([Settings.review])으로 자른다** — 배운 카드가
-     * 쌓이면 「오늘 아직 안 한 것」이 수백 장이 되는데, 홈 단추가 「복습 시작 · 312장」
-     * 이라고 말하면 오늘 앉아서 끝낼 수 있는 일의 크기를 뜻하지 않는다.
+     * 이 범위에서 오늘 아직 안 본 카드 수. 범위 줄의 「복습 N」이 적는 수다.
+     *
+     * **안 자른다.** 예전에는 하루 몫([Settings.review])으로 잘랐는데, 그 수는 한
+     * 자리의 크기도 남은 일의 크기도 아니었다 — 자세한 이유는 [Srs.round]에 적어 뒀다.
      *
      * 익힘 카드도 센다. 큐가 점수 낮은 순으로 내면서 자리가 남을 때 익힘 카드도
-     * 내므로, 여기서 빼면 「복습 0」인 날에 복습 카드가 나온다.
+     * 내므로, 여기서 빼면 「복습 0」인 날에 복습 카드가 나온다. 챌린지로 치워 둔
+     * 카드는 뺀다 — 그 카드는 오늘 안 나온다.
      */
     fun countTodo(ids: List<String>): Int {
         val t = today()
-        val n = ids.count { id ->
+        return ids.count { id ->
             val r = records[id]
-            r != null && !Srs.isDoneToday(r, t)
+            r != null && !Srs.isDoneToday(r, t) && !Srs.isHeld(r, t)
         }
-        return minOf(n, settings.review)
     }
 
     /** 배웠는데 아직 익힘이 아닌 카드 수. 새 카드 유입을 막는 상한이 보는 수다. */
