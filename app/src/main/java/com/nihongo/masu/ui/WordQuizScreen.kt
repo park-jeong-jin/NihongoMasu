@@ -303,12 +303,12 @@ private fun WordQuizScreen(
             if (!revealed) {
                 PrimaryButton("정답 확인", { revealed = true }, Modifier.fillMaxWidth())
             } else {
+                ChallengeButton(store.get(card.id)) {
+                    if (answer(Rating.GOOD)) store.challenge(card.id)
+                }
                 Text("얼마나 잘 떠올렸는지 골라 주세요", fontSize = 12.sp, color = m.sumi3)
                 Spacer(Modifier.height(8.dp))
-                RatingRow(
-                    store.get(card.id),
-                    { if (answer(Rating.GOOD)) store.challenge(card.id) }
-                ) { answer(it) }
+                RatingRow { answer(it) }
             }
         }
     }) {

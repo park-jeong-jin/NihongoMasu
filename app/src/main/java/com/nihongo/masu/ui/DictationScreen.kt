@@ -212,6 +212,9 @@ fun DictationCard(
                 Spacer(Modifier.height(12.dp))
             }
 
+            ChallengeButton(store.get(kana.id(script))) {
+                if (answer(Rating.GOOD)) store.challenge(kana.id(script))
+            }
             Text(
                 "직접 판단해 주세요. 이 기록이 다음 복습 순서를 정합니다.",
                 fontSize = 12.sp,
@@ -219,10 +222,7 @@ fun DictationCard(
             )
             Spacer(Modifier.height(8.dp))
 
-            RatingRow(
-                store.get(kana.id(script)),
-                { if (answer(Rating.GOOD)) store.challenge(kana.id(script)) }
-            ) { answer(it) }
+            RatingRow { answer(it) }
             Spacer(Modifier.height(8.dp))
             GhostButton("다시 쓰기", { state.clear() }, Modifier.fillMaxWidth())
         }

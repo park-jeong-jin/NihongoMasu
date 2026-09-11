@@ -833,13 +833,8 @@ fun QuizHeader(session: QuizSession<*>, label: String) {
  * 기본 단추 여백(가로 24dp)으로는 넷이 들어가면 세 글자가 잘린다.
  */
 @Composable
-fun RatingRow(
-    rec: Rec? = null,
-    onChallenge: (() -> Unit)? = null,
-    onRate: (Rating) -> Unit
-) {
+fun RatingRow(onRate: (Rating) -> Unit) {
     val m = LocalMasu.current
-    if (onChallenge != null) ChallengeButton(rec, onChallenge)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Rating.entries.forEach { r ->
             GhostButton(
@@ -869,11 +864,15 @@ fun RatingRow(
  * 익힘이 아닌 카드에는 아무것도 안 그린다. 자리를 비워 두지도 않는다 — 못 누르는
  * 단추가 회색으로 서 있으면 채점 줄이 카드마다 위아래로 움직인다.
  *
+ * [RatingRow] 안이 아니라 **부르는 쪽에서 그 위에** 세운다. 화면마다 채점 줄 바로
+ * 위에 「얼마나 잘 떠올렸는지 골라 주세요」 같은 안내가 한 줄 있는데, 안에 넣으면
+ * 그 말과 네 칸 사이에 단추가 끼어 무엇을 고르라는 말인지가 멀어진다.
+ *
  * 오른쪽에 사다리를 옅게 적는다(`3 · 7 · 14 · 30 · ∞`, 지금 칸만 진하게). 「3일」만
  * 적어 두면 이 단추가 한 번짜리 스누즈인지 오르는 사다리인지 알 길이 없다.
  */
 @Composable
-private fun ChallengeButton(rec: Rec?, onTake: () -> Unit) {
+fun ChallengeButton(rec: Rec?, onTake: () -> Unit) {
     if (!Srs.isMastered(rec)) return
     val m = LocalMasu.current
     val days = Srs.nextChallenge(rec)
