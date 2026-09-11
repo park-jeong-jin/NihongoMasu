@@ -3,11 +3,13 @@ package com.nihongo.masu
 import com.nihongo.masu.data.KanaData
 import com.nihongo.masu.data.Rating
 import com.nihongo.masu.data.Rec
+import com.nihongo.masu.data.Round
 import com.nihongo.masu.data.Script
 import com.nihongo.masu.data.Srs
 import com.nihongo.masu.data.Stage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -516,6 +518,81 @@ class SrsTest {
             dirs += out.map { it.dir }
         }
         assertEquals("방향이 한쪽으로만 나옴", setOf(0, 1), dirs)
+    }
+
+    // ── 오늘의 복습 판 ──
+
+    @Test fun `복습 판은 점수 낮은 순으로 하루 몫까지만 담는다`() {
+        val recs = mapOf(
+            "high" to Rec(score = 9, last = today - 1),
+            "low" to Rec(score = 1, last = today - 1),
+            "mid" to Rec(score = 5, last = today - 1),
+            "top" to Rec(score = 30, last = today - 1)
+        )
+        val ids = listOf("top", "high", "mid", "low", "새것")
+
+        // 기록 없는 카드는 안 든다. 새 카드는 범위를 골라 들어가는 화면이 튼다.
+        assertEquals(
+            listOf("low", "mid", "high", "top"),
+            Srs.round(ids, 10, today) { recs[it] }
+        )
+
+        // 하루 몫으로 자른다. 잘리는 쪽은 점수가 높은 = 덜 급한 카드다.
+        assertEquals(listOf("low", "mid"), Srs.round(ids, 2, today) { recs[it] })
+        assertTrue(Srs.round(ids, 0, today) { recs[it] }.isEmpty())
+    }
+
+    @Test fun `같은 점수면 오래 안 본 카드가 먼저다`() {
+        val recs = mapOf(
+            "어제" to Rec(score = 3, last = today - 1),
+            "지난주" to Rec(score = 3, last = today - 7)
+        )
+        assertEquals(
+            listOf("지난주", "어제"),
+            Srs.round(listOf("어제", "지난주"), 10, today) { recs[it] }
+        )
+    }
+
+    @Test fun `오늘 통과한 카드는 판에 안 든다`() {
+        val recs = mapOf(
+            "통과" to Rec(score = 2, last = today, fail = false),
+            "오늘틀림" to Rec(score = 2, last = today, fail = true),
+            "어제" to Rec(score = 2, last = today - 1)
+        )
+        val out = Srs.round(listOf("통과", "오늘틀림", "어제"), 10, today) { recs[it] }
+
+        // 오늘 틀린 카드는 남는다 — 못 떠올린 것은 그날 다시 물어야 한다.
+        assertEquals(setOf("오늘틀림", "어제"), out.toSet())
+
+        // 자정이 지나면 통과한 카드도 돌아온다. 판을 버리고 새로 까는 근거다.
+        assertEquals(3, Srs.round(listOf("통과", "오늘틀림", "어제"), 10, today + 1) { recs[it] }.size)
+    }
+
+    @Test fun `판은 한 줄로 적었다 그대로 되읽는다`() {
+        val r = Round(today, listOf("あ", "J日", "V食べる"), at = 2, ok = 1)
+        assertEquals(r, Round.decode(r.encode()))
+
+        // 카드가 하나도 없는 판도 왕복한다 — 오늘 몫을 다 한 날이 그렇다.
+        val empty = Round(today, emptyList())
+        assertEquals(empty, Round.decode(empty.encode()))
+    }
+
+    @Test fun `못 읽는 줄은 판을 안 만든다`() {
+        // 판 하나 잃는 것뿐이라 부르는 쪽이 새로 깐다.
+        assertNull(Round.decode(null))
+        assertNull(Round.decode(""))
+        assertNull(Round.decode("20000|1"))
+        assertNull(Round.decode("어제|1|0|あ"))
+
+        // 자리가 목록 밖이면 끝으로 당긴다. 저장된 줄을 손으로 고쳐도 안 깨진다.
+        assertEquals(2, Round.decode("20000|9|0|あ,い")?.at)
+        assertEquals(0, Round.decode("20000|-3|-3|あ,い")?.at)
+    }
+
+    @Test fun `남은 장수는 판 길이에서 지나온 자리를 뺀 것이다`() {
+        assertEquals(30, Round(today, (1..30).map { "c$it" }).left)
+        assertEquals(18, Round(today, (1..30).map { "c$it" }, at = 12).left)
+        assertEquals(0, Round(today, (1..30).map { "c$it" }, at = 30).left)
     }
 
     @Test fun `히라가나와 가타카나는 서로 다른 카드다`() {

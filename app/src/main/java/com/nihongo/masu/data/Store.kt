@@ -216,6 +216,14 @@ class Store(context: Context) {
      */
     private val _fresh = mutableStateOf(0L to 0)
 
+    /**
+     * 돌고 있는 오늘의 복습 판. 없거나 어제 것이면 [ensureRound]가 새로 깐다.
+     *
+     * 컴포즈가 보는 상태다 — 채점해서 자리가 옮겨가면 홈의 남은 장수가 같이 움직여야
+     * 한다. 판 자체는 [Round]가 한 줄로 적어 SharedPreferences에 들어간다.
+     */
+    private val _round = mutableStateOf<Round?>(null)
+
     /** 되돌리기 한 칸. [undoPrev]가 null이면 그 카드는 채점 전에 기록이 없었다. */
     private var undoId: String? = null
     private var undoPrev: Rec? = null
@@ -239,6 +247,64 @@ class Store(context: Context) {
             val n = fresh[1].toIntOrNull()
             if (day != null && n != null) _fresh.value = day to n
         }
+        // 어제 것이어도 그대로 읽어 둔다. 날짜는 읽는 쪽이 본다 — 여기서 버리면
+        // 앱을 켠 시각이 자정 직전인지 직후인지에 따라 판이 사라진다.
+        _round.value = Round.decode(prefs.getString(KEY_ROUND, null))
+    }
+
+    // ── 오늘의 복습 판 ──
+
+    /** 오늘 것이면 돌고 있는 판, 아니면 null. 날짜는 읽는 자리에서 본다. */
+    private fun todayRound(): Round? = _round.value?.takeIf { it.day == today() }
+
+    /** 지금 깐다면 나올 목록. 아직 안 깔린 판을 **읽기만** 하는 자리가 쓴다. */
+    private fun wouldBe(): List<String> =
+        Srs.round(activeCardIds, settings.review, today()) { records[it] }
+
+    /**
+     * 오늘 판에 든 카드 열쇠들. 차례가 곧 물을 순서다.
+     *
+     * 판이 아직 안 깔렸거나 어제 것이면 **깔았을 때의 목록**을 그 자리에서 센다.
+     * 여기서 판을 깔지 않는 이유는 이 값을 컴포즈가 그리는 도중에 읽기 때문이다 —
+     * 그리는 중에 상태를 쓰면 다시 그리기가 끝없이 돈다. 판은 [ensureRound]가
+     * 연습 화면에 들어설 때 깐다.
+     */
+    val roundIds: List<String> get() = todayRound()?.ids ?: wouldBe()
+
+    /** 홈 단추와 드로어에 적는 「오늘 복습」 남은 장수. */
+    val roundLeft: Int get() = todayRound()?.left ?: wouldBe().size
+
+    /**
+     * 복습 판에 들어설 때 부른다. 오늘 판이 있으면 **그대로 돌려준다** — 하던 자리를
+     * 이어 도는 것이 이 판의 일이다. 없거나 어제 것이면 새로 깐다.
+     */
+    fun ensureRound(): Round = todayRound() ?: newRound()
+
+    /** 판을 버리고 새로 깐다. 「한 바퀴 더」와 자정을 넘긴 판이 쓴다. */
+    fun newRound(): Round = Round(today(), wouldBe()).also { putRound(it) }
+
+    /**
+     * 돌던 자리를 옮긴다. 채점할 때마다 불린다 — 여기까지 왔다는 것을 그때그때
+     * 적어 둬야 앱이 닫혀도 이어 돈다.
+     *
+     * 큐까지 같이 받는 것은 틀린 카드를 몇 장 뒤에 되끼우면서([Srs.requeue]) 판이
+     * 길어지기 때문이다. 자리만 적으면 다음에 열었을 때 되끼운 카드가 사라진다.
+     */
+    fun saveRound(ids: List<String>, at: Int, ok: Int) {
+        val cur = _round.value ?: return
+        val next = cur.copy(ids = ids, at = at.coerceIn(0, ids.size), ok = ok)
+        if (next != cur) putRound(next)
+    }
+
+    private fun putRound(r: Round) {
+        _round.value = r
+        prefs.edit().putString(KEY_ROUND, r.encode()).apply()
+    }
+
+    /** 판이 가리키던 기록이 사라졌을 때 같이 버린다. */
+    private fun dropRound() {
+        _round.value = null
+        prefs.edit().remove(KEY_ROUND).apply()
     }
 
     /** 오늘 새로 튼 카드 수. 센 날이 오늘이 아니면 0이다 — 자정에 저절로 풀린다. */
@@ -297,6 +363,9 @@ class Store(context: Context) {
         records.putAll(recs)
         _days.value = days
         forgetUndo()
+        // 판이 가리키던 카드가 통째로 바뀌었다. 남겨 두면 남의 기록 위에서 자리만
+        // 이어져 「30장 중 12번째」가 아무 뜻이 없다.
+        dropRound()
         // 파일에 안 담기는 값이라 남의 기록 위에 오늘 숫자만 남으면 안 맞는다.
         bumpFresh(-freshToday)
         replaceAll()
@@ -399,6 +468,7 @@ class Store(context: Context) {
     fun resetAll() {
         records.clear()
         forgetUndo()
+        dropRound()
         _days.value = emptyList()
         bumpFresh(-freshToday)
         replaceAll()
@@ -479,5 +549,8 @@ class Store(context: Context) {
 
         /** 오늘 새로 튼 카드 수. 「날짜,장수」 한 줄이다. */
         private const val KEY_FRESH = "fresh_v1"
+
+        /** 돌고 있는 복습 판. 「날짜|자리|맞음|열쇠,열쇠,…」 한 줄이다. */
+        private const val KEY_ROUND = "round_v1"
     }
 }

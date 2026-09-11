@@ -409,6 +409,27 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
         rewind.mark(null)
     }
 
+    /**
+     * 저장해 둔 판을 **하던 자리에서** 이어 연다. [rebuild]와 달리 큐뿐 아니라
+     * 자리와 성적까지 넘겨받는다 — 앱이 닫혔다 열려도 「30장 중 12번째, 맞음 9」가
+     * 그대로 서야 이어 도는 것이 된다.
+     *
+     * 되끼우기 한도를 재는 [base]는 넘겨받은 큐 길이다. 저장된 큐에는 지난번에
+     * 되끼운 카드가 이미 들어 있으므로, 여기서 다시 처음 길이로 재면 이어 연 판만
+     * 한도가 그만큼 헐거워진다.
+     */
+    fun resume(queue: List<T>, at: Int, ok: Int) {
+        _queue.value = queue
+        base = queue.size
+        _index.intValue = at.coerceIn(0, queue.size)
+        _ok.intValue = ok
+        // 푼 장수는 자리로 센다. 따로 담지 않는 것은 되끼운 카드까지 세면 「맞음 9 / 12」의
+        // 분모가 화면의 「12번째」와 어긋나기 때문이다.
+        _total.intValue = index
+        _done.value = index >= queue.size
+        rewind.mark(null)
+    }
+
     /** 다음 카드로. 마지막이었으면 한 바퀴가 끝난다. */
     fun advance() {
         if (index + 1 >= queue.size) _done.value = true else _index.intValue++

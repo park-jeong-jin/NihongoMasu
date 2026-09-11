@@ -178,7 +178,7 @@ fun App(store: Store, speaker: Speaker) {
                 Spacer(Modifier.height(10.dp))
 
                 Text(
-                    "오늘 낼 카드 ${store.countTodo(store.activeCardIds)}장",
+                    "오늘 낼 카드 ${store.roundLeft}장",
                     Modifier.padding(horizontal = 28.dp),
                     fontSize = 12.sp,
                     color = m.sumi3
@@ -417,7 +417,9 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     val kanjiIds = remember { KanjiData.all.map { it.id } }
 
     val allCardIds = store.activeCardIds
-    val due = store.countTodo(allCardIds)
+    // 홈 단추에 적는 수와 단추가 여는 판은 같은 한 벌이어야 한다 —
+    // 「30장」이라 적어 놓고 이백 장이 깔리던 자리다 (Srs.Round).
+    val due = store.roundLeft
     val weak = store.countWeak(allCardIds)
     val stages = store.countStages(allCardIds)
     val kanaStages = store.countStages(kanaIds)

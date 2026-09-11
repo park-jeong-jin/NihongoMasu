@@ -30,6 +30,51 @@ data class Rec(
 )
 
 /**
+ * 오늘 도는 복습 판. **앱을 껐다 켜도 하던 자리에서 이어 돌라고 통째로 저장한다.**
+ *
+ * 홈의 「오늘 복습」과 오답 노트의 「오늘 복습」이 이 한 벌을 같이 쓴다. 예전에는 홈이
+ * 세는 수와 오답 노트가 까는 목록이 서로 다른 계산이라 — 홈은 기록 있는 카드를 하루
+ * 몫으로 자르고, 오답 노트는 익히는 중 카드를 안 자르고 통으로 깔았다 — 「30장」이라
+ * 적어 놓고 이백 장이 깔렸다. 판을 하나로 두면 어긋날 자리가 없다.
+ *
+ * @param day 판을 깐 날. 오늘이 아니면 버리고 새로 깐다 — 자정이 지나면 저절로 풀린다
+ * @param ids 물을 차례대로의 카드 열쇠
+ * @param at  다음에 물을 자리. [ids] 크기에 닿으면 한 바퀴를 다 돈 것이다
+ * @param ok  지금까지 통과한 장수. 이어 열 때 성적 줄이 0부터 다시 세지 않게 같이 담는다
+ */
+data class Round(
+    val day: Long,
+    val ids: List<String>,
+    val at: Int = 0,
+    val ok: Int = 0
+) {
+    /** 아직 안 푼 장수. 홈 단추가 적는 수다. */
+    val left: Int get() = (ids.size - at).coerceAtLeast(0)
+
+    /**
+     * 한 줄로 적는다. 카드 열쇠에는 쉼표도 세로줄도 안 들어간다 — 표기가 그대로
+     * 열쇠인데 `DataTest`가 표기를 지키고, 가나·한자는 머리글자 하나에 한 글자다.
+     */
+    fun encode(): String = "$day|$at|$ok|${ids.joinToString(",")}"
+
+    companion object {
+        /**
+         * 못 읽으면 null이고 부르는 쪽이 판을 새로 깐다. 판 하나 잃는 것뿐이라
+         * 기록 되읽기처럼 따로 알리지 않는다.
+         */
+        fun decode(text: String?): Round? {
+            val f = text?.split('|', limit = 4) ?: return null
+            if (f.size != 4) return null
+            val day = f[0].toLongOrNull() ?: return null
+            val at = f[1].toIntOrNull() ?: return null
+            val ok = f[2].toIntOrNull() ?: return null
+            val ids = f[3].split(',').filter { it.isNotBlank() }
+            return Round(day, ids, at.coerceIn(0, ids.size), ok.coerceAtLeast(0))
+        }
+    }
+}
+
+/**
  * 채점 등급. 얀키의 Again/Hard/Good/Easy와 같은 네 갈래다.
  *
  * 맞았나 틀렸나 둘로만 받으면 「간신히 떠올린 카드」와 「보자마자 안 카드」가
@@ -299,6 +344,31 @@ object Srs {
         val at = (index + gap).coerceIn(index + 1, grown.size)
         return grown.subList(0, at) + queue[index] + grown.subList(at, grown.size)
     }
+
+    /**
+     * 오늘의 복습 판을 깐다 — 기록이 있고 오늘 통과하지 못한 카드를 **점수 낮은
+     * 순으로** [limit]장까지. 같은 점수면 오래 안 본 것부터다.
+     *
+     * **새 카드를 안 섞는다.** 이 판은 배운 것을 하루 몫만큼 돌리는 자리이고, 새
+     * 카드는 범위를 골라 들어가는 맞추기 화면이 튼다. 홈 단추에 적히는 장수와
+     * 대상이 같아야 그 수가 실제 판 길이가 된다.
+     *
+     * **마지막에 안 섞는 것**이 [queue]와 다른 점이다. 거기서는 묶음을 중간에
+     * 그만두면 하필 새 카드만 못 보고 끝나는 것을 막으려고 섞는데, 이 판은 자리를
+     * 저장해서 이어 도므로 중간에 그만둬도 잃는 것이 없다. 섞을 이유가 없어지면
+     * 약한 카드를 먼저 만나는 쪽이 낫다.
+     */
+    fun round(
+        ids: List<String>,
+        limit: Int,
+        today: Long,
+        recOf: (String) -> Rec?
+    ): List<String> =
+        ids.mapNotNull { id -> recOf(id)?.let { id to it } }
+            .filterNot { isDoneToday(it.second, today) }
+            .sortedWith(compareBy({ it.second.score }, { it.second.last }))
+            .take(limit.coerceAtLeast(0))
+            .map { it.first }
 
     /**
      * 학습 순서를 정한다. [limit]장까지 채우고 같은 카드가 두 번 들어가지 않는다.
