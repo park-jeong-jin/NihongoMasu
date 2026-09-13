@@ -462,7 +462,7 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
         if (rating.pass) _ok.intValue++
         // 못 넘긴 카드는 그 자리에서 몇 장 뒤에 한 번 더 묻는다.
         else _queue.value = Srs.requeue(
-            queue, index, pool = pool(),
+            queue, index, store.today(), pool = pool(),
             limit = base * Srs.SESSION_CAP,
             idOf = idOf,
             recOf = { store.get(idOf(it)) }
@@ -912,7 +912,8 @@ internal fun commas(n: Int): String = "%,d".format(n)
  * 쓰게 한 자리에 둔다 — 두 곳에 따로 적어 두면 이름을 고칠 때 한쪽이 남고, 위아래
  * 색이 어긋나면 펼친 줄이 막대의 어느 칸인지 알 길이 없다.
  *
- * 「막대에서 왼쪽부터」가 아니라 익힘·익히는 중·아직 순이다. 막대 칸 순서와 같다.
+ * 차례는 막대 칸과 같은 익힘·익히는 중·아직 순이다. [ScopeRow]가 펼치는 줄은
+ * 손이 제일 자주 가는 「아직」을 맨 위에 두려고 이 차례를 뒤집어 쓴다.
  */
 val Stage.label: String
     get() = when (this) {
@@ -1414,8 +1415,8 @@ fun ScopeRow(
         // 됐다. 전폭 한 줄로 키우면 알아보기는 하는데 **카드마다 40dp가 붙어** 분류가
         // 열 줄인 등급에서 목록이 그만큼 길어진다.
         //
-        // 그래서 이미 있는 막대 글자 줄의 오른쪽 끝을 쓴다. 「단계별」이라는 말이
-        // 서니 기호를 찾을 일이 없고, 줄을 안 늘리니 카드 높이도 그대로다.
+        // 그래서 이미 있는 막대 글자 줄의 오른쪽 끝을 쓴다. 하는 일이 「펼치기」라는
+        // 글자로 서니 기호를 찾을 일이 없고, 줄을 안 늘리니 카드 높이도 그대로다.
         Row(
             Modifier
                 .fillMaxWidth()

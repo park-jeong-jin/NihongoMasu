@@ -39,9 +39,9 @@ private data class Row4(
 /**
  * 목록을 거르는 갈래.
  *
- * [TODAY]만 성격이 다르다 — 나머지 셋은 「기록이 이런 카드를 다 보여 달라」는 조건이고,
- * 이것은 **오늘 돌기로 깔아 둔 판**이다. 그래서 장수가 하루 몫으로 잘려 있고, 차례가
- * 점수 낮은 순으로 정해져 있고, 어디까지 풀었는지가 저장된다 ([Store.ensureRound]).
+ * [TODAY]만 성격이 다르다 — 나머지 넷은 「기록이 이런 카드를 다 보여 달라」는 조건이고,
+ * 이것은 **오늘 돌기로 깔아 둔 판**이다. 그래서 차례가 점수 낮은 순으로 정해져 있고,
+ * 어디까지 풀었는지가 저장된다 ([Store.ensureRound]).
  *
  * 뒤 두 갈래는 이름을 줄였다. 칸이 넷에서 다섯으로 늘면서 「틀린 적 있음」·「배운 카드
  * 전체」가 좁은 폭에서 잘린다.
@@ -354,7 +354,22 @@ private fun ReviewPractice(
     fun open() {
         if (saved) {
             val r = store.ensureRound()
-            session.resume(rows, r.at, r.ok)
+            // **판이 든 열쇠로 세운다.** [rows]는 이 컴포지션이 시작할 때 걸러진
+            // 목록이라 「한 바퀴 더」가 방금 깐 새 판을 아직 모른다 — 그대로 쓰면
+            // 버린 판이 그 자리에서 다시 깔리고, 아래 저장이 새 판을 덮어쓴다.
+            //
+            // 목록에 없는 열쇠는 흘리고 자리도 그만큼 당긴다. 카드를 초기화하면
+            // 기록이 없어져 그 줄이 안 만들어지는데, 자리를 그대로 두면 흘린 수만큼
+            // 뒤로 밀려 그 앞 카드들을 건너뛴다.
+            val byId = rows.associateBy { it.id }
+            val queue = ArrayList<Row4>(r.ids.size)
+            var at = 0
+            r.ids.forEachIndexed { i, id ->
+                val row = byId[id] ?: return@forEachIndexed
+                if (i < r.at) at++
+                queue.add(row)
+            }
+            session.resume(queue, at, r.ok)
         } else {
             val left = rows.filterNot { Srs.isDoneToday(it.rec, store.today()) }
             session.rebuild(left.ifEmpty { start.shuffled() })
