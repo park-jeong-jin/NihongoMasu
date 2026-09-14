@@ -281,15 +281,15 @@ class SrsTest {
         // 본 지 오래된 e → f 순으로 끌어온다. 새 카드 g까지 가지 않는다.
         assertEquals(
             listOf("a", "b", "c", "e", "f", "c"),
-            Srs.requeue(q, 2, today, gap = 3, pool = pool, recOf = rec)
+            Srs.requeue(q, 2, today, gap = 3, pool = { pool }, recOf = rec)
         )
 
         // 배운 카드가 모자라면 새 카드로 메우지 않고 묶음을 끝낸다. 자리채우개는
         // 채점할 수 없어서, 넣어 봐야 세지 않는 카드 한 장이 더 나올 뿐이다.
-        assertEquals(q, Srs.requeue(q, 2, today, gap = 3, pool = pool, recOf = { if (it == "e") Rec(last = 1) else null }))
+        assertEquals(q, Srs.requeue(q, 2, today, gap = 3, pool = { pool }, recOf = { if (it == "e") Rec(last = 1) else null }))
 
         // 상한에 닿으면 끌어오지 않는다. 틀릴 때마다 묶음이 길어지면 끝이 없다.
-        assertEquals(q, Srs.requeue(q, 2, today, gap = 3, pool = pool, recOf = rec, limit = 4))
+        assertEquals(q, Srs.requeue(q, 2, today, gap = 3, pool = { pool }, recOf = rec, limit = 4))
     }
 
     @Test fun `자리채우개는 열쇠가 같은 다른 방향 카드를 끌어오지 않는다`() {
@@ -303,7 +303,7 @@ class SrsTest {
         val learned = mapOf("d" to Rec(last = 10), "e" to Rec(last = 20))
 
         val out = Srs.requeue(
-            q, 2, today, gap = 3, pool = pool,
+            q, 2, today, gap = 3, pool = { pool },
             idOf = { it.key }, recOf = { learned[it.key] }
         )
 
@@ -318,7 +318,7 @@ class SrsTest {
         var qi = 0
         var guard = 0
         while (guard++ < 1000) {
-            queue = Srs.requeue(queue, qi, today, pool = pool, limit = 20, recOf = { Rec(last = it.toLong()) })
+            queue = Srs.requeue(queue, qi, today, pool = { pool }, limit = 20, recOf = { Rec(last = it.toLong()) })
             if (qi + 1 >= queue.size) break
             qi++
         }
@@ -682,12 +682,12 @@ class SrsTest {
         // gap 2면 자리채우개가 한 장만 있으면 된다. 셋을 요구하면 치움을 뺀 뒤
         // 남은 한 장으로는 모자라서 requeue가 통째로 포기해 버려, 「걸렀나」가 아니라
         // 「아무 일도 안 했나」를 보게 된다.
-        val out = Srs.requeue(q, 2, today, gap = 2, pool = pool, recOf = { recs[it] })
+        val out = Srs.requeue(q, 2, today, gap = 2, pool = { pool }, recOf = { recs[it] })
         assertFalse("치워 둔 카드가 끌려 나옴: $out", "치움" in out)
         assertTrue("자리채우개가 아예 안 붙음: $out", "멀쩡" in out)
 
         // 치운 날이 지나면 다시 끌어올 수 있다. 본 지 제일 오래됐으니 이번엔 이쪽이다.
-        val later = Srs.requeue(q, 2, today + 20, gap = 2, pool = pool, recOf = { recs[it] })
+        val later = Srs.requeue(q, 2, today + 20, gap = 2, pool = { pool }, recOf = { recs[it] })
         assertTrue("치운 날이 지났는데도 안 끌려옴: $later", "치움" in later)
     }
 

@@ -462,7 +462,7 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
         if (rating.pass) _ok.intValue++
         // 못 넘긴 카드는 그 자리에서 몇 장 뒤에 한 번 더 묻는다.
         else _queue.value = Srs.requeue(
-            queue, index, store.today(), pool = pool(),
+            queue, index, store.today(), pool = pool,
             limit = base * Srs.SESSION_CAP,
             idOf = idOf,
             recOf = { store.get(idOf(it)) }

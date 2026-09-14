@@ -375,6 +375,10 @@ object Srs {
      * 곧바로 다시 나오고, 또 틀리면 그 한 장만 되풀이된다. 그래서 [pool]에서 카드를
      * 끌어와 자리를 만든다.
      *
+     * [pool]을 **람다로 받는다.** 자리를 만들 일은 묶음 끝 몇 장에서만 생기는데 값으로
+     * 받으면 틀릴 때마다 통을 새로 만든다 — 단어 맞추기의 통은 범위 안 단어마다 기록을
+     * 한 번씩 들춰 Face를 방향 수만큼 만드는 일이라, 대부분 그대로 버려진다.
+     *
      * 이미 나온 카드인지는 [idOf]가 뽑는 열쇠로 본다. 카드에 묻는 방향이 실리면 같은
      * 글자가 통에 방향마다 한 장씩 들어 있어서, 카드 자체를 비교하면 큐에 있는
      * `あ`(로마자) 옆에 `あ`(듣고 쓰기)를 끌어와 한 묶음에 같은 글자가 두 번 나온다.
@@ -399,7 +403,7 @@ object Srs {
         index: Int,
         today: Long,
         gap: Int = LAPSE_GAP.random(),
-        pool: List<T> = emptyList(),
+        pool: () -> List<T> = { emptyList() },
         limit: Int = Int.MAX_VALUE,
         idOf: (T) -> String = { it.toString() },
         recOf: (T) -> Rec? = { null }
@@ -408,7 +412,7 @@ object Srs {
         val need = index + gap - queue.size
         val grown = if (need <= 0) queue else {
             val seen = queue.mapTo(HashSet()) { idOf(it) }
-            val fill = pool.filter {
+            val fill = pool().filter {
                 idOf(it) !in seen && recOf(it) != null && !isHeld(recOf(it), today)
             }
                 // 열쇠가 같은 카드 중 어느 방향이 남을지는 [queue]가 버킷을 섞어

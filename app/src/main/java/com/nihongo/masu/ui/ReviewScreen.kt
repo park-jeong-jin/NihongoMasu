@@ -398,12 +398,17 @@ private fun ReviewPractice(
     // 큐까지 같이 적는 것은 틀린 카드를 되끼우면서 판이 길어지기 때문이다 —
     // 자리만 적으면 다음에 열었을 때 되끼운 카드가 사라진다.
     if (saved) {
-        val ids = session.queue.map { it.id }
+        val queue = session.queue
         // 마지막 장을 채점하면 [QuizSession.advance]가 자리는 그대로 두고 `done`만
         // 세운다. 그 자리를 그대로 적으면 다 돈 판이 「1장 남음」으로 남아서, 홈
         // 단추가 영영 한 장을 가리킨다.
-        val at = if (session.done) ids.size else session.index
-        LaunchedEffect(ids, at, session.ok) { store.saveRound(ids, at, session.ok) }
+        val at = if (session.done) queue.size else session.index
+        // 열쇠로 큐 자체가 아니라 **길이**를 쓴다. 큐가 바뀌는 길은 되끼우기뿐이고
+        // 그때는 반드시 길어지므로 길이로 충분한데, 목록을 넘기면 다시 그릴 때마다
+        // 열쇠 수백 개를 새로 만들어 하나씩 견주게 된다.
+        LaunchedEffect(queue.size, at, session.ok) {
+            store.saveRound(queue.map { it.id }, at, session.ok)
+        }
     }
 
     val row = session.card

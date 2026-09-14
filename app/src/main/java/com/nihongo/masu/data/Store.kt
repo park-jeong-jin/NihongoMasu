@@ -2,6 +2,7 @@ package com.nihongo.masu.data
 
 import android.content.Context
 import android.content.SharedPreferences
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.runtime.mutableStateMapOf
@@ -201,8 +202,15 @@ class Store(context: Context) {
      * 설정을 따르는 집계 범위. 가나나 한자를 끄면 빠진다 — 안 외우기로 한 글자가
      * 익힘 분모에 남으면 비율이 100%에 닿지 않는다. 기록 자체는 남으므로
      * 다시 켜면 그대로 돌아온다.
+     *
+     * **들고 있는다.** 값이 [Settings.kana]·[Settings.kanji] 둘로만 정해지는데,
+     * 그냥 게터로 두면 부를 때마다 열쇠 6,668개를 새로 만든다 — `"V$표기"`가 문자열
+     * 하나씩이다. 오답 노트 머리의 요약 상자 셋만 해도 한 번 그릴 때 두 만 개다.
+     * [derivedStateOf]는 저 두 값이 바뀔 때만 다시 만들고, 컴포즈가 보는 상태라
+     * 설정을 끄고 켜면 화면이 그대로 따라온다.
      */
-    val activeCardIds: List<String> get() = cardIds(kanaScripts, settings.kanji)
+    private val _activeCardIds = derivedStateOf { cardIds(kanaScripts, settings.kanji) }
+    val activeCardIds: List<String> get() = _activeCardIds.value
 
     /** 최근 학습한 날들(일수). 홈의 연속기록 점이 이걸로 그려진다. */
     private val _days = mutableStateOf<List<Long>>(emptyList())
@@ -271,8 +279,14 @@ class Store(context: Context) {
      */
     val roundIds: List<String> get() = todayRound()?.ids ?: wouldBe()
 
-    /** 홈 단추와 드로어에 적는 「오늘 복습」 남은 장수. */
-    val roundLeft: Int get() = todayRound()?.left ?: wouldBe().size
+    /**
+     * 홈 단추와 드로어에 적는 「오늘 복습」 남은 장수.
+     *
+     * 판이 안 깔렸으면 [countTodo]로 **세기만 한다.** [wouldBe]와 거르는 조건이
+     * 같은데 그쪽은 차례까지 정하느라 정렬을 하고 중간 목록을 셋 만든다 — 세는
+     * 자리에서는 다 버리는 일이다. 홈과 드로어가 그릴 때마다 부르는 값이다.
+     */
+    val roundLeft: Int get() = todayRound()?.left ?: countTodo(activeCardIds)
 
     /**
      * 복습 판에 들어설 때 부른다. 오늘 판이 있으면 **그대로 돌려준다** — 하던 자리를
