@@ -267,16 +267,20 @@ private fun ReviewList(
                         }
                     }
                     Spacer(Modifier.width(10.dp))
-                    Box(
-                        Modifier
-                            .pressSurface(
-                                RoundedCornerShape(8.dp),
-                                m.sunk,
-                                onClickLabel = "이 카드 초기화"
-                            ) { pendingReset = row }
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
-                    ) {
-                        Text("초기화", fontSize = 11.sp, color = m.sumi2)
+                    // 기록이 없는 줄에는 안 세운다. 되돌릴 기록이 없어서 눌러도
+                    // 아무 일이 안 일어나고, 되묻는 창만 한 번 떴다 사라진다.
+                    if (row.rec != null) {
+                        Box(
+                            Modifier
+                                .pressSurface(
+                                    RoundedCornerShape(8.dp),
+                                    m.sunk,
+                                    onClickLabel = "이 카드 초기화"
+                                ) { pendingReset = row }
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
+                        ) {
+                            Text("초기화", fontSize = 11.sp, color = m.sumi2)
+                        }
                     }
                 }
                 HorizontalDivider(color = m.ruleSoft)

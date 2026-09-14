@@ -1,5 +1,7 @@
 package com.nihongo.masu.data
 
+import kotlin.random.Random
+
 /**
  * 카드 한 장의 학습 기록.
  *
@@ -444,6 +446,11 @@ object Srs {
      * 복습 차례는 점수 낮은 순, 같은 점수면 오래 안 본 순이다. 새 카드는 그 사이
      * 아무 자리에나 끼운다 — 뒤에 몰아 두면 중간에 그만둔 날 하필 새 단어만 못 보고,
      * 앞에 몰아 두면 0점짜리 스무 장을 연달아 맞는다.
+     *
+     * **섞는 씨앗이 [today]다.** 이 함수는 판을 깔기 전에 「지금 깐다면 나올 목록」을
+     * 세는 자리에서도 불리는데([Store.roundIds]), 부를 때마다 다른 판이 나오면 목록에
+     * 세워 둔 카드와 실제로 깔린 카드가 어긋난다. 날이 바뀌면 씨앗도 바뀌므로 동점
+     * 카드 차례는 날마다 새롭다.
      */
     fun round(
         ids: List<String>,
@@ -459,14 +466,24 @@ object Srs {
             if (r == null) fresh.add(id)
             else if (!isDoneToday(r, today) && !isHeld(r, today)) review.add(id to r)
         }
+        val rng = Random(today)
         // 먼저 섞고 정렬한다. sortedWith가 안정 정렬이라 점수·마지막 날이 같은 카드끼리는
-        // 섞인 차례가 그대로 남는다 — 안 섞으면 동점 카드가 날마다 같은 순서로 선다.
-        val out = review.shuffled()
+        // 섞인 차례가 그대로 남는다 — 안 섞으면 동점 카드가 자료 파일 줄 순서로 선다.
+        val out = review.shuffled(rng)
             .sortedWith(compareBy({ it.second.score }, { it.second.last }))
             .mapTo(ArrayList(review.size + quota)) { it.first }
-        if (quota > 0) {
-            fresh.shuffled().sortedBy(levelOf).take(quota)
-                .forEach { out.add((0..out.size).random(), it) }
+
+        // 등급으로 묶고 **뽑을 등급만** 섞는다. 통째로 정렬하면 아직 안 튼 카드가
+        // 6,200장이라 홈이 그릴 때마다 그 전부를 늘어놓게 된다.
+        var need = quota
+        if (need > 0 && fresh.isNotEmpty()) {
+            val byLevel = fresh.groupBy(levelOf)
+            for (level in byLevel.keys.sorted()) {
+                if (need == 0) break
+                val take = byLevel.getValue(level).shuffled(rng).take(need)
+                take.forEach { out.add(rng.nextInt(out.size + 1), it) }
+                need -= take.size
+            }
         }
         return out
     }
@@ -483,8 +500,12 @@ object Srs {
      * 다시 나오고, 그때 또 맞혀도 [grade]가 점수를 올리지 않는다.
      *
      * 복습부터 채우되 [freshQuota]장은 새 카드 자리로 남겨 둔다. 새 카드가 다
-     * 떨어졌으면 복습이 묶음을 전부 가져가고, 반대로 복습이 모자라면 새 카드가 남은
-     * 자리를 다 받는다. 0을 주면 복습만 나온다 — 오늘 몫을 다 튼 날이 그 상태다.
+     * 떨어졌으면 복습이 묶음을 전부 가져간다. 0을 주면 복습만 나온다 — 오늘 몫을
+     * 다 튼 날이 그 상태다.
+     *
+     * **반대 방향으로는 안 넘친다.** 복습이 모자라도 새 카드는 [freshQuota]장까지다 —
+     * 그 수가 하루 몫이라, 남은 자리를 새 카드가 다 받으면 범위를 좁혀 들어갈 때마다
+     * 몫이 새고 「한 바퀴 더」로 되풀이까지 된다. 빈자리는 오늘 통과한 카드가 받는다.
      *
      * 마지막에 전체를 섞는다. 복습을 앞에 몰아 두면 묶음을 중간에 그만뒀을 때
      * 하필 새 카드만 못 보고 끝난다.
@@ -532,8 +553,11 @@ object Srs {
         fill(ready, reviewCap)
         // 0장은 예약 자리가 없다는 뜻이 아니라 아예 안 내겠다는 뜻이다. 그냥 채우게 두면
         // 복습을 다 따라잡은 날 남은 자리가 전부 새 카드로 넘어간다.
-        if (room > 0) fill(fresh, limit)
-        // 어느 한쪽이 몫을 다 못 채웠으면 남은 자리는 다른 쪽이 받는다.
+        //
+        // 몫만큼만 더 넣는다. `limit`까지 채우게 두면 복습이 몇 장 안 되는 범위에서
+        // 새 카드가 묶음을 통째로 가져가 하루 몫을 넘긴다.
+        if (room > 0) fill(fresh, minOf(limit, out.size + room))
+        // 복습이 몫을 다 못 채웠으면 남은 자리는 복습이 마저 받는다.
         fill(ready, limit)
         fill(later, limit)
 

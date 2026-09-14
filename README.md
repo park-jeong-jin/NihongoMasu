@@ -544,7 +544,7 @@ JLPT 등급이 아닌 칸을 하나 둔 것은 목적이 다르기 때문이다.
 ```
 ./gradlew assembleDebug      # 디버그 APK
 ./gradlew installDebug       # 폰에 설치
-./gradlew testDebugUnitTest  # 단위 테스트 124개
+./gradlew testDebugUnitTest  # 단위 테스트 126개
 ```
 
 **JDK는 `~/.gradle/gradle.properties`의 `org.gradle.java.home`에 21로 못 박혀 있습니다**
@@ -574,7 +574,7 @@ Gradle 8.9가 JDK 22까지만 도는데 이 기기 기본 java가 25라, 못 박
 | `data/Quiz.kt` | 카드 종류(단어·한자)와 무엇을 물을지(보기·일→한·한→일·일↔한) |
 | `data/Tokens.kt` | 끊어 둔 예문 읽기와 조각별 뜻 붙이기 |
 | `data/Cloze.kt` | 문장 맞추기의 통과 빈칸 치환(문장·읽기). 안드로이드 의존성 없는 순수 함수 |
-| `data/Srs.kt` | 점수 계산·묶음 구성. 오늘의 복습 판(`Round` · `round`), 챌린지 사다리(`challenge` · `isHeld`), 손으로 놓는 점수(`setScore`), 단계 필터(`inStage`)와 「아직」 판 장수(`freshRoom`)도 여기. 안드로이드 의존성 없는 순수 함수 |
+| `data/Srs.kt` | 점수 계산·묶음 구성. 오늘의 복습 판(`Round` · `round`), 챌린지 사다리(`challenge` · `isHeld`), 손으로 놓는 점수(`setScore`), 단계 필터(`inStage`)도 여기. 안드로이드 의존성 없는 순수 함수 |
 | `data/Store.kt` | SharedPreferences에 카드마다 한 칸씩 저장, 설정, 돌던 복습 판(`round_v1`) |
 | `data/Backup.kt` | 기록을 파일 한 장으로 내보내고 되읽기 |
 | `data/RomajiCheck.kt` | 로마자 채점 (헵번식·일본식 둘 다) |
@@ -591,7 +591,7 @@ Gradle 8.9가 JDK 22까지만 도는데 이 기기 기본 java가 25라, 못 박
 | `ui/RomajiScreen.kt` `DictationScreen.kt` | 문제 한 장씩. 자기 입력 위젯과 채점만 맡는다 |
 | `ui/WordQuizScreen.kt` | 단어·한자 맞추기와 「보기」. `ViewScreen`이 칩에 매달린 점수 판으로 `Store`에 점수를 놓는다 |
 | `ui/` | 나머지 화면들. 연습 기능마다 `XxxFlow` 안에 목록과 연습이 들어 있다 |
-| `src/test/` | 단위 테스트 124개 (JVM에서 바로 실행) |
+| `src/test/` | 단위 테스트 126개 (JVM에서 바로 실행) |
 
 `Srs.kt` `ShapeCompare.kt` `RomajiCheck.kt` `Search.kt` `Backup.kt`는 일부러 안드로이드
 API를 쓰지 않았습니다. 덕분에 기기 없이도 JVM에서 바로 테스트할 수 있고, `app/src/test/`가 그 값을
@@ -599,7 +599,7 @@ API를 쓰지 않았습니다. 덕분에 기기 없이도 JVM에서 바로 테�
 
 | 테스트 | 고정하는 것 |
 |---|---|
-| `SrsTest` (51) | 점수 구간과 익힘 판정, 채점 등급 넷, 오름은 하루 한 번·내림은 즉시, 익힘까지 열흘, 손으로 놓는 점수, 점수 순 정렬, 단계 필터, 오늘의 공부 판(복습 차례·하루 몫·쉬운 등급부터·복습 사이에 흩뿌림·오늘 통과 제외·한 줄 저장), 챌린지 사다리(3·7·14·30·무한, 실패하면 처음부터, 판·큐에서 빠짐), 묶음 구성, 오답 재삽입(치워 둔 카드는 자리채우개로도 안 나옴), 방향 섞기 |
+| `SrsTest` (53) | 점수 구간과 익힘 판정, 채점 등급 넷, 오름은 하루 한 번·내림은 즉시, 익힘까지 열흘, 손으로 놓는 점수, 점수 순 정렬, 단계 필터, 오늘의 공부 판(복습 차례·하루 몫·쉬운 등급부터·복습 사이에 흩뿌림·같은 날은 같은 판·오늘 통과 제외·한 줄 저장), 챌린지 사다리(3·7·14·30·무한, 실패하면 처음부터, 판·큐에서 빠짐), 묶음 구성, 오답 재삽입(치워 둔 카드는 자리채우개로도 안 나옴), 방향 섞기 |
 | `DataTest` (22) | 등급별 개수, 열쇠 중복, 가나 표기, 예문 누락, 예문 읽기, 오답 후보, 한자↔단어 색인, 복습 범위 여닫기 |
 | `ClozeTest` (11) | 빈칸이 표기를 다 가리는지, 읽기 쪽이 정답을 흘리지 않는지, 통 크기 |
 | `ShapeCompareTest` (8) | 모양 점수의 경계값 |
