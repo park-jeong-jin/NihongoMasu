@@ -444,7 +444,7 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
                 StageBar(stages, allCardIds.size)
                 Spacer(Modifier.height(14.dp))
                 PrimaryButton(
-                    if (due > 0) "오늘 복습 시작 · ${due}장"
+                    if (due > 0) "오늘 공부 시작 · ${due}장"
                     else "${Feature.KANA.label} 시작",
                     {
                         go(

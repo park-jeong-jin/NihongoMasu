@@ -259,22 +259,11 @@ private fun WordQuizScreen(
     val verdict = session.verdict
 
     fun rebuild() {
-        // 「아직」 판만 판 크기를 좁힌다 — 이유는 Srs.freshRoom에 적어 뒀다.
-        // 세는 범위는 단계로 걸러내기 **전**의 등급·분류다. 걸러낸 뒤를 세면
-        // 익히는 중 장수가 정의상 0이라 상한이 아무것도 막지 않는다.
-        if (stage == Stage.NEW) {
-            val ids = when (kind) {
-                CardKind.WORD -> VocabData.of(level, tag).map { it.id }
-                CardKind.KANJI -> KanjiData.of(level).map { it.id }
-            }
-            session.rebuild(
-                limit = Srs.freshRoom(
-                    store.settings.batch,
-                    store.settings.learningCap,
-                    store.countLearning(ids)
-                )
-            )
-        } else session.rebuild()
+        // 「아직」 판은 오늘 남은 몫만큼만 깐다. 이 판에는 복습 카드가 하나도 없어서
+        // 「한쪽이 모자라면 남은 자리는 다른 쪽이 받는다」가 걸린다 — 안 좁히면 새 카드가
+        // 묶음을 통째로 채운다. 누를 때마다 스무 장씩, 끝없이.
+        if (stage == Stage.NEW) session.rebuild(limit = store.dailyLeft)
+        else session.rebuild()
         revealed = false
     }
 

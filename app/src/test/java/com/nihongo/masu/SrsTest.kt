@@ -19,7 +19,6 @@ class SrsTest {
     private val today = 20_000L
 
     /** 익히는 중 상한을 안 보는 테스트가 쓰는 값. 상한 자체는 아래에서 따로 고정한다. */
-    private val cap = 999
 
     // ── 구간과 판정 ──
 
@@ -79,24 +78,6 @@ class SrsTest {
         for (r in listOf(fresh, learning, mastered)) {
             assertTrue(Srs.inStage(r, Srs.stageOf(r)))
         }
-    }
-
-    @Test fun `아직 판은 상한에서 손에 쥔 장수를 뺀 만큼만 깐다`() {
-        // 상한 20에 손에 쥔 것이 18장이면 새로 틀 자리는 두 장뿐이다.
-        assertEquals(2, Srs.freshRoom(batch = 20, learningCap = 20, learning = 18))
-
-        // 손이 비어 있으면 묶음 크기가 그대로 한도다.
-        assertEquals(20, Srs.freshRoom(batch = 20, learningCap = 20, learning = 0))
-
-        // 묶음이 상한보다 작으면 묶음이 이긴다 — 한 자리에 낼 장수는 묶음 크기다.
-        assertEquals(5, Srs.freshRoom(batch = 5, learningCap = 20, learning = 0))
-
-        // 상한에 닿았으면 0이다. 판을 안 깔고 「손에 쥔 것이 이미 상한」이라고 말한다.
-        assertEquals(0, Srs.freshRoom(batch = 20, learningCap = 20, learning = 20))
-
-        // 넘겨 쥐고 있어도 음수로 안 내려간다 — 자리가 하나 비면 몫이 통째로 나오는
-        // 한 번짜리 넘침 때문에 상한을 넘긴 상태가 실제로 생긴다.
-        assertEquals(0, Srs.freshRoom(batch = 20, learningCap = 20, learning = 24))
     }
 
     @Test fun `약한 카드는 두 번 이상 틀렸고 틀린 쪽이 더 많은 것만`() {
@@ -244,7 +225,7 @@ class SrsTest {
         val failed = Srs.grade(Rec(score = 6, ok = 6), Rating.AGAIN, today)
         assertEquals(3, failed.score)
         assertFalse("제외가 과하게 걸리면 틀린 카드를 그날 못 다시 묻는다", Srs.isDoneToday(failed, today))
-        assertTrue("f" in Srs.queue(listOf("f"), 10, today, 5, cap, { it }, { failed }))
+        assertTrue("f" in Srs.queue(listOf("f"), 10, today, 5, { it }, { failed }))
 
         // 틀려서 깎인 점수는 그날 안에 회복되지 않는다. fail만 내려가 배지가 돌아온다.
         val retry = Srs.grade(failed, Rating.GOOD, today)
@@ -337,7 +318,7 @@ class SrsTest {
         repeat(20) {
             assertEquals(
                 listOf("low"),
-                Srs.queue(listOf("low", "high"), 1, today, 0, cap, { it }, { recs[it] })
+                Srs.queue(listOf("low", "high"), 1, today, 0, { it }, { recs[it] })
             )
         }
 
@@ -348,7 +329,7 @@ class SrsTest {
         repeat(20) {
             assertEquals(
                 listOf("old"),
-                Srs.queue(listOf("old", "recent"), 1, today, 0, cap, { it }, { same[it] })
+                Srs.queue(listOf("old", "recent"), 1, today, 0, { it }, { same[it] })
             )
         }
     }
@@ -362,7 +343,7 @@ class SrsTest {
         repeat(20) {
             assertEquals(
                 listOf("weak"),
-                Srs.queue(listOf("plain", "weak"), 1, today, 0, cap, { it }, { recs[it] })
+                Srs.queue(listOf("plain", "weak"), 1, today, 0, { it }, { recs[it] })
             )
         }
     }
@@ -378,13 +359,13 @@ class SrsTest {
             assertEquals(
                 "점수가 낮아도 오늘 몫을 한 카드가 먼저 나오면 안 된다",
                 listOf("todo"),
-                Srs.queue(items, 1, today, 0, cap, { it }, { recs[it] })
+                Srs.queue(items, 1, today, 0, { it }, { recs[it] })
             )
         }
         // 빼지는 않는다. 자리가 남으면 「한 바퀴 더」에 다시 나온다.
         assertEquals(
             items.toSet(),
-            Srs.queue(items, 2, today, 0, cap, { it }, { recs[it] }).toSet()
+            Srs.queue(items, 2, today, 0, { it }, { recs[it] }).toSet()
         )
     }
 
@@ -394,7 +375,7 @@ class SrsTest {
             "mastered" to Rec(score = 30, ok = 30, last = today - 40)
         )
         val items = listOf("learn", "mastered", "fresh")
-        val out = Srs.queue(items, 10, today, Srs.DEFAULT_FRESH, cap, { it }, { recs[it] })
+        val out = Srs.queue(items, 10, today, 5, { it }, { recs[it] })
         assertEquals(items.toSet(), out.toSet())
         assertEquals(out.size, out.distinct().size)
 
@@ -403,36 +384,16 @@ class SrsTest {
         repeat(20) {
             assertEquals(
                 listOf("learn"),
-                Srs.queue(listOf("learn", "mastered"), 1, today, 0, cap, { it }, { recs[it] })
+                Srs.queue(listOf("learn", "mastered"), 1, today, 0, { it }, { recs[it] })
             )
         }
-    }
-
-    @Test fun `익히는 중 상한에 닿으면 새 카드를 안 낸다`() {
-        // 없으면 새 카드가 매일 0점으로 들어와 낮은 점수대를 채우고, 먼저 배운 카드가
-        // 영영 문턱에 못 닿는다 — 카드 하나에 오름 열 번이 필요하기 때문이다.
-        val holding = (1..20).map { "hold$it" }
-        val recs = holding.associateWith { Rec(score = 2, ok = 2, last = today - 1) }
-        val items = holding + (1..10).map { "new$it" }
-
-        val full = Srs.queue(items, 15, today, 5, 20, { it }, { recs[it] })
-        assertTrue("상한에 닿았는데 새 카드가 나왔다: $full", full.none { it.startsWith("new") })
-
-        // 자리가 하나라도 비면 새 카드 몫이 살아난다.
-        val room = Srs.queue(items, 15, today, 5, 21, { it }, { recs[it] })
-        assertEquals(5, room.count { it.startsWith("new") })
-
-        // 익힘 카드는 손에 쥔 것이 아니라 상한에 안 걸린다.
-        val done = holding.associateWith { Rec(score = 30, ok = 30, last = today - 40) }
-        val over = Srs.queue(items, 15, today, 5, 20, { it }, { done[it] })
-        assertEquals(5, over.count { it.startsWith("new") })
     }
 
     @Test fun `복습이 아무리 쌓여도 새 카드 몫은 남는다`() {
         val old = (1..100).map { "old$it" }
         val recs = old.associateWith { Rec(score = 1, ok = 1, last = today - 1) }
         val out = Srs.queue(
-            old + (1..100).map { "new$it" }, 15, today, 5, cap, { it }, { recs[it] }
+            old + (1..100).map { "new$it" }, 15, today, 5, { it }, { recs[it] }
         )
         assertEquals(15, out.size)
         assertEquals(5, out.count { it.startsWith("new") })
@@ -443,7 +404,7 @@ class SrsTest {
         val recs = old.associateWith { Rec(score = 1, ok = 1, last = today - 1) }
 
         // 새 카드가 없으면 복습이 묶음을 다 쓴다.
-        assertEquals(15, Srs.queue(old, 15, today, 5, cap, { it }, { recs[it] }).size)
+        assertEquals(15, Srs.queue(old, 15, today, 5, { it }, { recs[it] }).size)
 
         // 복습이 둘뿐이면 나머지는 새 카드가 받는다.
         val few = mapOf(
@@ -451,7 +412,7 @@ class SrsTest {
             "o2" to Rec(score = 1, ok = 1, last = today - 1)
         )
         val out = Srs.queue(
-            listOf("o1", "o2") + (1..50).map { "new$it" }, 15, today, 5, cap, { it }, { few[it] }
+            listOf("o1", "o2") + (1..50).map { "new$it" }, 15, today, 5, { it }, { few[it] }
         )
         assertEquals(15, out.size)
         assertEquals(13, out.count { it.startsWith("new") })
@@ -462,7 +423,7 @@ class SrsTest {
         val recs = old.associateWith { Rec(score = 1, ok = 1, last = today - 1) }
         val items = old + (1..100).map { "new$it" }
         fun freshIn(quota: Int) =
-            Srs.queue(items, 15, today, quota, cap, { it }, { recs[it] })
+            Srs.queue(items, 15, today, quota, { it }, { recs[it] })
                 .count { it.startsWith("new") }
 
         assertEquals(0, freshIn(0))      // 복습만
@@ -479,7 +440,7 @@ class SrsTest {
         val brandNew = listOf("x", "y", "z", "w")
         val recs = learned.associateWith { Rec(score = 1, ok = 1, last = today - 1) }
 
-        val out = Srs.queue(learned + brandNew, 10, today, 0, cap, { it }, { recs[it] })
+        val out = Srs.queue(learned + brandNew, 10, today, 0, { it }, { recs[it] })
         assertTrue("새 카드가 섞였다: $out", out.none { it in brandNew })
         assertEquals(learned.toSet(), out.toSet())
     }
@@ -489,7 +450,7 @@ class SrsTest {
         val old = (1..100).map { "old$it" }
         val recs = old.associateWith { Rec(score = 1, ok = 1, last = today - 1) }
         val early = (1..20).count {
-            Srs.queue(old + (1..100).map { n -> "new$n" }, 15, today, 5, cap, { it }, { recs[it] })
+            Srs.queue(old + (1..100).map { n -> "new$n" }, 15, today, 5, { it }, { recs[it] })
                 .take(5).any { c -> c.startsWith("new") }
         }
         assertTrue("스무 번 다 뒤쪽에만 나옴", early > 0)
@@ -497,7 +458,7 @@ class SrsTest {
 
     @Test fun `개수 제한을 넘기지 않는다`() {
         val items = (1..50).map { "c$it" }
-        val out = Srs.queue(items, 12, today, Srs.DEFAULT_FRESH, cap, { it }, { null })
+        val out = Srs.queue(items, 12, today, 5, { it }, { null })
         assertEquals(12, out.size)
         assertEquals(out.size, out.distinct().size)
     }
@@ -511,7 +472,7 @@ class SrsTest {
         val dirs = mutableSetOf<Int>()
 
         repeat(50) {
-            val out = Srs.queue(items, 4, today, 4, cap, { it.key }, { null })
+            val out = Srs.queue(items, 4, today, 4, { it.key }, { null })
             // 같은 글자가 두 번 들어가면 방향만 바뀐 같은 문제를 연달아 푼다.
             assertEquals(4, out.size)
             assertEquals(out.size, out.map { it.key }.distinct().size)
@@ -531,16 +492,15 @@ class SrsTest {
         )
         val ids = listOf("top", "high", "mid", "low", "새것")
 
-        // 기록 없는 카드는 안 든다. 새 카드는 범위를 골라 들어가는 화면이 튼다.
-        // **하루 몫으로 안 자른다** — 30장을 끝내도 그날 복습이 끝나는 것이 아니라,
-        // 잘린 수는 한 자리의 크기도 남은 일의 크기도 아니었다.
+        // 몫이 0이면 복습만 든다. **복습은 안 자른다** — 오늘 나올 것이 곧 오늘 할
+        // 일이라 여기서 줄이면 밀린 카드가 영영 안 줄어든다.
         assertEquals(
             listOf("low", "mid", "high", "top"),
-            Srs.round(ids, today) { recs[it] }
+            Srs.round(ids, today, 0, { 0 }) { recs[it] }
         )
 
-        // 낼 것이 없으면 빈 판이다. 「오늘 복습을 다 끝냈습니다」가 서는 자리다.
-        assertTrue(Srs.round(listOf("새것"), today) { recs[it] }.isEmpty())
+        // 낼 것이 없으면 빈 판이다. 「오늘 몫을 다 끝냈습니다」가 서는 자리다.
+        assertTrue(Srs.round(listOf("새것"), today, 0, { 0 }) { recs[it] }.isEmpty())
     }
 
     @Test fun `같은 점수면 오래 안 본 카드가 먼저다`() {
@@ -550,7 +510,7 @@ class SrsTest {
         )
         assertEquals(
             listOf("지난주", "어제"),
-            Srs.round(listOf("어제", "지난주"), today) { recs[it] }
+            Srs.round(listOf("어제", "지난주"), today, 0, { 0 }) { recs[it] }
         )
     }
 
@@ -561,7 +521,7 @@ class SrsTest {
         val ids = (1..12).map { "동점$it" }
         val recs = ids.associateWith { Rec(score = 3, last = today - 1) }
 
-        val seen = (1..20).map { Srs.round(ids, today) { recs[it] } }.toSet()
+        val seen = (1..20).map { Srs.round(ids, today, 0, { 0 }) { recs[it] } }.toSet()
         assertTrue("동점 카드 차례가 늘 같다", seen.size > 1)
         // 섞어도 판에서 새는 카드는 없다.
         seen.forEach { assertEquals(ids.toSet(), it.toSet()) }
@@ -573,13 +533,93 @@ class SrsTest {
             "오늘틀림" to Rec(score = 2, last = today, fail = true),
             "어제" to Rec(score = 2, last = today - 1)
         )
-        val out = Srs.round(listOf("통과", "오늘틀림", "어제"), today) { recs[it] }
+        val out = Srs.round(listOf("통과", "오늘틀림", "어제"), today, 0, { 0 }) { recs[it] }
 
         // 오늘 틀린 카드는 남는다 — 못 떠올린 것은 그날 다시 물어야 한다.
         assertEquals(setOf("오늘틀림", "어제"), out.toSet())
 
         // 자정이 지나면 통과한 카드도 돌아온다. 판을 버리고 새로 까는 근거다.
-        assertEquals(3, Srs.round(listOf("통과", "오늘틀림", "어제"), today + 1) { recs[it] }.size)
+        assertEquals(3, Srs.round(listOf("통과", "오늘틀림", "어제"), today + 1, 0, { 0 }) { recs[it] }.size)
+    }
+
+    @Test fun `하루 몫만큼 새 카드가 판에 든다`() {
+        val recs = mapOf("복습" to Rec(score = 2, last = today - 1))
+        val ids = listOf("복습") + (1..100).map { "새$it" }
+
+        val out = Srs.round(ids, today, quota = 20, levelOf = { 0 }) { recs[it] }
+
+        // 복습은 다 들고 새 카드는 몫만큼만. 기록 없는 카드가 백 장이어도 스무 장이다.
+        assertEquals(21, out.size)
+        assertEquals(20, out.count { it.startsWith("새") })
+        assertTrue(out.contains("복습"))
+        assertEquals(out.size, out.distinct().size)
+
+        // 몫이 남은 새 카드보다 크면 있는 만큼만 든다. 빈자리를 복습으로 메우지 않는다.
+        val few = Srs.round(listOf("복습", "새1"), today, quota = 20, levelOf = { 0 }) { recs[it] }
+        assertEquals(2, few.size)
+    }
+
+    @Test fun `새 카드는 쉬운 등급부터 든다`() {
+        // N5가 몫보다 많으면 N4는 한 장도 안 나온다. 앞 등급을 남겨 두고 다음으로
+        // 넘어가면 시험에 나오는 쉬운 단어가 끝까지 안 튄 채로 남는다.
+        val n5 = (1..30).map { "n5_$it" }
+        val n4 = (1..30).map { "n4_$it" }
+        val level = { id: String -> if (id.startsWith("n5")) 0 else 1 }
+
+        val out = Srs.round(n4 + n5, today, quota = 20, levelOf = level) { null }
+        assertEquals(20, out.size)
+        assertTrue("쉬운 등급을 남겨 두고 다음 등급이 나옴", out.all { it.startsWith("n5") })
+
+        // N5를 다 트고 나면 넘어간다. 몫이 남은 N5보다 크면 그만큼 N4가 채운다.
+        val recs = n5.associateWith { Rec(score = 2, last = today) }   // 오늘 다 봤다
+        val next = Srs.round(n4 + n5, today, quota = 20, levelOf = level) { recs[it] }
+        assertEquals(20, next.size)
+        assertTrue(next.all { it.startsWith("n4") })
+    }
+
+    @Test fun `같은 등급 안에서는 새 카드가 매번 다르게 뽑힌다`() {
+        // 안 섞으면 자료 파일 차례가 그대로 나와서 한 분류(사람 · 음식 …)가 며칠씩
+        // 이어진다. 어제 「친구」를 배웠으면 오늘은 「가족」인 식이다.
+        val ids = (1..50).map { "새$it" }
+        val seen = (1..20).map { Srs.round(ids, today, quota = 5, levelOf = { 0 }) { null } }.toSet()
+        assertTrue("뽑히는 카드가 늘 같다", seen.size > 1)
+        seen.forEach { assertEquals(5, it.size) }
+    }
+
+    @Test fun `새 카드는 복습 사이에 흩어진다`() {
+        // 뒤에 몰아 두면 중간에 그만둔 날 하필 새 단어만 못 보고, 앞에 몰아 두면
+        // 0점짜리 스무 장을 연달아 맞는다.
+        val old = (1..40).map { "복습$it" }
+        val recs = old.associateWith { Rec(score = 1, last = today - 1) }
+        val ids = old + (1..40).map { "새$it" }
+
+        val front = (1..20).count {
+            Srs.round(ids, today, quota = 10, levelOf = { 0 }) { recs[it] }
+                .take(10).any { c -> c.startsWith("새") }
+        }
+        assertTrue("스무 번 다 뒤쪽에만 나옴", front > 0)
+
+        val back = (1..20).count {
+            Srs.round(ids, today, quota = 10, levelOf = { 0 }) { recs[it] }
+                .takeLast(10).any { c -> c.startsWith("새") }
+        }
+        assertTrue("스무 번 다 앞쪽에만 나옴", back > 0)
+    }
+
+    @Test fun `몫을 다 튼 날은 복습만 나온다`() {
+        // dailyLeft가 0을 넘기는 상태다. 자정이 지나기 전까지 새 단어가 안 뜬다.
+        val recs = mapOf("복습" to Rec(score = 2, last = today - 1))
+        val out = Srs.round(listOf("복습", "새1", "새2"), today, 0, { 0 }) { recs[it] }
+        assertEquals(listOf("복습"), out)
+    }
+
+    @Test fun `치워 둔 카드와 오늘 통과한 카드는 몫을 채워도 안 나온다`() {
+        val recs = mapOf(
+            "치움" to Rec(score = 12, last = today - 1, hold = today + 3),
+            "통과" to Rec(score = 2, last = today, fail = false)
+        )
+        val out = Srs.round(listOf("치움", "통과", "새1"), today, quota = 5, levelOf = { 0 }) { recs[it] }
+        assertEquals(listOf("새1"), out)
     }
 
     @Test fun `판은 한 줄로 적었다 그대로 되읽는다`() {
@@ -647,11 +687,11 @@ class SrsTest {
         )
         val ids = listOf("치움", "뺌", "그냥")
 
-        assertEquals(listOf("그냥"), Srs.round(ids, today) { recs[it] })
-        assertEquals(listOf("그냥"), Srs.queue(ids, 10, today, 0, cap, { it }) { recs[it] })
+        assertEquals(listOf("그냥"), Srs.round(ids, today, 0, { 0 }) { recs[it] })
+        assertEquals(listOf("그냥"), Srs.queue(ids, 10, today, 0, { it }) { recs[it] })
 
         // 치운 날이 지나면 둘 중 하나만 돌아온다.
-        assertEquals(setOf("치움", "그냥"), Srs.round(ids, today + 3) { recs[it] }.toSet())
+        assertEquals(setOf("치움", "그냥"), Srs.round(ids, today + 3, 0, { 0 }) { recs[it] }.toSet())
     }
 
     @Test fun `실패하면 사다리가 처음으로 돌아가고 치운 것도 풀린다`() {

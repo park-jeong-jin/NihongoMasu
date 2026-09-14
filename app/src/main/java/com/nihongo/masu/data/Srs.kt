@@ -39,12 +39,10 @@ data class Rec(
 )
 
 /**
- * 오늘 도는 복습 판. **앱을 껐다 켜도 하던 자리에서 이어 돌라고 통째로 저장한다.**
+ * 오늘 도는 공부 판. **앱을 껐다 켜도 하던 자리에서 이어 돌라고 통째로 저장한다.**
  *
- * 홈의 「오늘 복습」과 오답 노트의 「오늘 복습」이 이 한 벌을 같이 쓴다. 예전에는 홈이
- * 세는 수와 오답 노트가 까는 목록이 서로 다른 계산이라 — 홈은 기록 있는 카드를 하루
- * 몫으로 자르고, 오답 노트는 익히는 중 카드를 안 자르고 통으로 깔았다 — 「30장」이라
- * 적어 놓고 이백 장이 깔렸다. 판을 하나로 두면 어긋날 자리가 없다.
+ * 홈의 「오늘 공부」와 오답 노트의 「오늘 공부」가 이 한 벌을 같이 쓴다. 세는 수와 까는
+ * 목록이 따로 계산되면 「30장」이라 적어 놓고 이백 장이 깔린다.
  *
  * @param day 판을 깐 날. 오늘이 아니면 버리고 새로 깐다 — 자정이 지나면 저절로 풀린다
  * @param ids 물을 차례대로의 카드 열쇠
@@ -142,32 +140,26 @@ object Srs {
     const val SESSION_CAP = 2
 
     /**
-     * 한 묶음의 새 카드·복습 장수 기본값.
+     * 하루에 새로 틀 카드 수의 기본값. 이 값 하나가 하루 공부를 정한다.
      *
-     * 새 카드 몫을 따로 두지 않으면 복습이 묶음을 통째로 채워서 새 단어가 한 장도
-     * 안 나온다. 얀키가 하루 신규 장수를 복습 상한과 별개의 숫자로 두는 것과 같은
-     * 이유다. 복습만 하루 종일 할 수는 없다. 둘 다 설정에서 바꾼다.
+     * 카드 한 장이 [MASTERED_AT]까지 오르는 데 최소 열흘이고 점수는 하루 한 번만
+     * 오르므로, 하루 N장씩 들어와 열흘 만에 졸업하면 손에 쥔 카드가 `N × 10`에서
+     * 평형이 된다. 하루 푸는 장수는 거기에 오늘 튼 N장을 더한 `N × 11`이다 —
+     * 20장이면 하루 220장이다.
      *
-     * 복습 몫이 [DEFAULT_LEARNING_CAP]만큼은 돼야 익히는 중 카드가 하루 한 번씩 다
-     * 나온다. 모자라면 손에 쥔 카드가 문턱까지 오르는 데 그 배수만큼 더 걸린다.
+     * 그래서 따로 상한을 두지 않는다. 브레이크가 둘이면 늘 작은 쪽만 남아서
+     * 사용자가 고른 수가 조용히 무시된다.
      */
-    const val DEFAULT_FRESH = 5
-    const val DEFAULT_REVIEW = 20
+    const val DEFAULT_DAILY = 20
 
     /**
-     * 손에 쥐고 도는 「익히는 중」 카드의 상한. 넘으면 새 카드를 안 낸다.
+     * 범위 연습(등급·분류를 골라 들어온 판)의 한 묶음 크기.
      *
-     * 날짜가 없어지면서 **하루에 나올 수 있는 카드 수를 아무것도 막지 않게 됐다.**
-     * 예전에는 복습일이 카드마다 흩어져서 그게 저절로 됐다. 그대로 두면 매일 새 카드가
-     * 0점으로 들어와 낮은 점수대를 채우고, 점수 낮은 순으로 내는 큐가 늘 그것들을
-     * 앞세워서 먼저 배운 카드가 영영 문턱에 못 닿는다 — 카드 하나에 오름 열 번이
-     * 필요한데 새 카드가 하루 다섯 장 들어오면 하루에 복습 쉰 번이 필요하다.
-     *
-     * 그래서 자리가 비는 만큼만 새로 튼다. 얀키의 학습 대기열 상한과 같은 생각이다.
-     * 상한 20 · 복습 20장이면 20장이 하루 한 번씩 올라 열흘에 문턱을 넘으므로
-     * 하루 두 장쯤 익힘에 오르고, 그만큼 새 카드가 들어온다.
+     * 하루 몫과 다른 축이다 — 몫은 「오늘 얼마나 틀까」이고 이것은 「한 자리가
+     * 얼마나 기나」라서, 30장이 넘으면 한 번에 앉아 끝낼 수 없다. 더 하고 싶으면
+     * 「한 바퀴 더」가 판을 다시 깐다.
      */
-    const val DEFAULT_LEARNING_CAP = 20
+    const val DEFAULT_BATCH = 20
 
     /**
      * 채점 결과를 반영한 새 기록을 돌려준다.
@@ -213,15 +205,15 @@ object Srs {
      * 점수를 손으로 놓는다. [grade]의 「오름은 하루 한 번」을 지나가는 유일한 자리다.
      *
      * 이미 아는 단어를 열흘 걸려 문턱까지 올릴 이유가 없어서 둔다. 가타카나 외래어처럼
-     * 읽으면 그냥 아는 것들이 0점으로 들어와 [DEFAULT_LEARNING_CAP]을 채우고 있으면,
-     * 정작 외워야 할 단어가 새 카드로 나올 자리를 못 얻는다.
+     * 읽으면 그냥 아는 것들이 하루 몫을 축내고 열흘 내내 복습 판에 끼어 있으면,
+     * 정작 외워야 할 단어를 볼 자리가 그만큼 줄어든다.
      *
      * [Rec.fail]을 내린다. 점수만 [MASTERED_AT]에 놓으면 예전에 틀려 비트가 서 있는
      * 카드가 10점인데 익힘이 아닌 채로 남는다.
      *
      * [Rec.ok]·[Rec.ng]·[Rec.last]는 안 건드린다. 실제로 답한 것이 아니라 맞음·틀림에
      * 셀 것이 없고, `last`를 오늘로 밀면 [isDoneToday]가 서서 훑어보기만 한 카드가
-     * 오늘 복습에서 빠진다.
+     * 오늘 공부 판에서 빠진다.
      *
      * **챌린지로 치워 둔 것은 푼다.** 판이 0~[MASTERED_AT]뿐이라 여기서 놓는 점수는
      * 늘 문턱 아래거나 문턱이고, 그런 카드를 30일씩 치워 둘 이유가 없다. 사다리 끝까지
@@ -248,10 +240,7 @@ object Srs {
     fun isMastered(rec: Rec?): Boolean =
         rec != null && rec.score >= MASTERED_AT && !rec.fail
 
-    /**
-     * 손에 쥐고 도는 카드 — 배웠는데 아직 익힘이 아닌 것. 새 카드 유입을 막는
-     * 상한([DEFAULT_LEARNING_CAP])이 이걸 센다.
-     */
+    /** 손에 쥐고 도는 카드 — 배웠는데 아직 익힘이 아닌 것. 진행 막대의 가운데 칸이다. */
     fun isLearning(rec: Rec?): Boolean = rec != null && !isMastered(rec)
 
     /**
@@ -277,23 +266,6 @@ object Srs {
      * 표시 전용이고, 점수 계산에 단계를 들이면 그 선이 무너진다.
      */
     fun inStage(rec: Rec?, stage: Stage?): Boolean = stage == null || stageOf(rec) == stage
-
-    /**
-     * [Stage.NEW]만 걸러 들어온 판의 크기. 상한에서 지금 손에 쥔 장수를 뺀 만큼이다.
-     *
-     * [queue]의 [DEFAULT_LEARNING_CAP]은 **넘겨준 목록 안에서** 익히는 중 카드를
-     * 세는데, 「아직」만 걸러 넣으면 그 수가 정의상 0이라 문이 영영 안 닫힌다. 게다가
-     * 그 판에는 복습 카드가 하나도 없어서 「한쪽이 모자라면 남은 자리는 다른 쪽이
-     * 받는다」가 걸려 새 카드가 묶음을 통째로 채운다 — 누를 때마다 스무 장씩, 끝없이.
-     *
-     * 그래서 부르는 쪽에서 판을 미리 자른다. [queue]를 고쳐 새 카드 채우기를 상한으로
-     * 막으면 등급·분류로 들어온 판까지 같이 좁아진다 — 그쪽은 상한을 문으로 쓰는 게
-     * 맞다. 자리가 하나 비면 몫이 통째로 나오는 한 번짜리 넘침은 끝이 있다.
-     *
-     * 0이면 판을 안 깐다. 손에 쥔 것이 이미 상한이니 새로 틀 자리가 없다는 뜻이다.
-     */
-    fun freshRoom(batch: Int, learningCap: Int, learning: Int): Int =
-        minOf(batch, learningCap - learning).coerceAtLeast(0)
 
     // ── 챌린지 사다리 ──
 
@@ -457,12 +429,47 @@ object Srs {
      * 외운 것처럼 보이는 판이 만들어진다. 섞어 두면 점수 차례는 그대로고 동점끼리만
      * 매번 다른 차례로 선다.
      */
-    fun round(ids: List<String>, today: Long, recOf: (String) -> Rec?): List<String> =
-        ids.mapNotNull { id -> recOf(id)?.let { id to it } }
-            .filterNot { isDoneToday(it.second, today) || isHeld(it.second, today) }
-            .shuffled()
+    /**
+     * 오늘 공부할 판. 복습할 카드 전부와 아직 안 튼 카드 [quota]장이 한 판에 든다.
+     *
+     * 복습은 안 자른다 — 오늘 나올 것이 곧 오늘 할 일이라 여기서 줄이면 밀린 카드가
+     * 영영 안 줄어든다. 줄이고 싶으면 [quota]를 낮춘다. 손에 쥔 카드가 `quota × 10`에서
+     * 평형이 되므로 그 수가 복습량도 같이 정한다 ([DEFAULT_DAILY]).
+     *
+     * 새 카드는 **쉬운 등급부터** 채운다. [levelOf]는 낮을수록 쉬운 서수다 — 가나를
+     * 모르는 채로 단어를 외우는 차례는 없고, N5를 남겨 두고 N4로 넘어갈 이유도 없다.
+     * 같은 등급 안에서는 섞어서 자료 파일 차례가 그대로 나오지 않게 한다. 안 섞으면
+     * 한 분류(사람 · 음식 …)가 며칠씩 이어진다.
+     *
+     * 복습 차례는 점수 낮은 순, 같은 점수면 오래 안 본 순이다. 새 카드는 그 사이
+     * 아무 자리에나 끼운다 — 뒤에 몰아 두면 중간에 그만둔 날 하필 새 단어만 못 보고,
+     * 앞에 몰아 두면 0점짜리 스무 장을 연달아 맞는다.
+     */
+    fun round(
+        ids: List<String>,
+        today: Long,
+        quota: Int,
+        levelOf: (String) -> Int,
+        recOf: (String) -> Rec?
+    ): List<String> {
+        val review = ArrayList<Pair<String, Rec>>()
+        val fresh = ArrayList<String>()
+        for (id in ids) {
+            val r = recOf(id)
+            if (r == null) fresh.add(id)
+            else if (!isDoneToday(r, today) && !isHeld(r, today)) review.add(id to r)
+        }
+        // 먼저 섞고 정렬한다. sortedWith가 안정 정렬이라 점수·마지막 날이 같은 카드끼리는
+        // 섞인 차례가 그대로 남는다 — 안 섞으면 동점 카드가 날마다 같은 순서로 선다.
+        val out = review.shuffled()
             .sortedWith(compareBy({ it.second.score }, { it.second.last }))
-            .map { it.first }
+            .mapTo(ArrayList(review.size + quota)) { it.first }
+        if (quota > 0) {
+            fresh.shuffled().sortedBy(levelOf).take(quota)
+                .forEach { out.add((0..out.size).random(), it) }
+        }
+        return out
+    }
 
     /**
      * 학습 순서를 정한다. [limit]장까지 채우고 같은 카드가 두 번 들어가지 않는다.
@@ -477,12 +484,7 @@ object Srs {
      *
      * 복습부터 채우되 [freshQuota]장은 새 카드 자리로 남겨 둔다. 새 카드가 다
      * 떨어졌으면 복습이 묶음을 전부 가져가고, 반대로 복습이 모자라면 새 카드가 남은
-     * 자리를 다 받는다. 0을 주면 복습만 나온다.
-     *
-     * **익히는 중 카드가 [learningCap]장에 닿으면 새 카드를 아예 안 낸다** — 그 이유는
-     * [DEFAULT_LEARNING_CAP]에 적혀 있다. 세는 범위는 [items] 안이다. 범위를 좁혀
-     * 들어온 사람에게 다른 범위에서 채운 상한을 들이대면, 고른 등급이 통째로 새
-     * 카드인데도 한 장도 안 나온다.
+     * 자리를 다 받는다. 0을 주면 복습만 나온다 — 오늘 몫을 다 튼 날이 그 상태다.
      *
      * 마지막에 전체를 섞는다. 복습을 앞에 몰아 두면 묶음을 중간에 그만뒀을 때
      * 하필 새 카드만 못 보고 끝난다.
@@ -492,14 +494,12 @@ object Srs {
         limit: Int,
         today: Long,
         freshQuota: Int,
-        learningCap: Int,
         idOf: (T) -> String,
         recOf: (String) -> Rec?
     ): List<T> {
         val todo = ArrayList<Pair<T, Rec>>()
         val done = ArrayList<Pair<T, Rec>>()
         val fresh = ArrayList<T>()
-        var learning = 0
 
         for (item in items) {
             val r = recOf(idOf(item))
@@ -507,10 +507,8 @@ object Srs {
                 fresh.add(item)
                 continue
             }
-            // 챌린지로 치워 둔 카드는 아예 안 담는다. 익힘 뒤에만 걸리므로
-            // 아래 익히는 중 상한에는 닿지 않는다 — 세기 전에 빠져도 수가 같다.
+            // 챌린지로 치워 둔 카드는 아예 안 담는다. 그 카드는 오늘 안 나온다.
             if (isHeld(r, today)) continue
-            if (isLearning(r)) learning++
             if (isDoneToday(r, today)) done.add(item to r) else todo.add(item to r)
         }
 
@@ -528,9 +526,8 @@ object Srs {
             }
         }
 
-        // 상한에 닿았으면 새 카드 자리를 아예 떼지 않는다. 새 카드가 남아 있을 때만
-        // 자리를 떼는 것도 같다 — 없으면 복습이 묶음을 다 쓴다.
-        val room = if (learning >= learningCap) 0 else freshQuota.coerceIn(0, limit)
+        // 새 카드가 남아 있을 때만 자리를 뗀다 — 없으면 복습이 묶음을 다 쓴다.
+        val room = freshQuota.coerceIn(0, limit)
         val reviewCap = if (fresh.isEmpty() || room == 0) limit else limit - room
         fill(ready, reviewCap)
         // 0장은 예약 자리가 없다는 뜻이 아니라 아예 안 내겠다는 뜻이다. 그냥 채우게 두면

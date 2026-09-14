@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.nihongo.masu.data.KanjiData
 import com.nihongo.masu.data.Settings
+import com.nihongo.masu.data.Srs
 import com.nihongo.masu.data.Store
 import com.nihongo.masu.data.ThemeMode
 import java.time.LocalDate
@@ -98,42 +99,36 @@ fun SettingsScreen(store: Store) {
             AskRows(s.ask, auto = true) { s.ask = it }
         }
 
-        SectionLabel("한 묶음 구성")
+        SectionLabel("하루 목표")
         MasuCard {
             Text(
-                "가나 맞추기와 단어 맞추기가 한 번에 낼 장수입니다. 새 카드와 복습을 " +
-                    "따로 고릅니다 — 합만 정하면 복습이 그 안에서 얼마를 가져갈지는 " +
-                    "손댈 수가 없습니다.",
+                "하루에 새로 틀 단어 수입니다. 이 값 하나가 하루 공부를 정합니다 — " +
+                    "새 단어가 이만큼 나오고, 복습은 오늘 나올 것이 다 나옵니다.",
                 fontSize = 12.sp,
                 color = m.sumi3
             )
 
             Spacer(Modifier.height(10.dp))
-            CountSlider("새 카드", s.fresh) { s.fresh = it }
-            CountSlider("복습 카드", s.review) { s.review = it }
-            CountSlider("익히는 중 상한", s.learningCap, Settings.CAPS) { s.learningCap = it }
+            CountSlider("하루 새 단어", s.daily) { s.daily = it }
+
+            Spacer(Modifier.height(10.dp))
+            DailyCost(s.daily)
 
             Spacer(Modifier.height(14.dp))
             Text(
-                "한 묶음 ${s.batch}장 · 새 카드 ${s.batch.let { if (it == 0) 0 else s.fresh * 100 / it }}%",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = m.ai
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                "한쪽이 모자라면 남은 자리는 다른 쪽이 받습니다. 두 카드는 묶음 안에서 " +
-                    "섞여서 나옵니다. 둘 다 0으로 둘 수는 없습니다.",
+                "복습 장수를 따로 고르지 않는 것은 그 수가 이미 여기서 나오기 " +
+                    "때문입니다. 카드 한 장은 ${Srs.MASTERED_AT}번 맞혀야 익힘이 되고 " +
+                    "점수는 하루 한 번만 오르므로, 하루 N장씩 들어와 " +
+                    "${Srs.MASTERED_AT}일 만에 졸업하면 손에 쥔 카드가 그 배수에서 " +
+                    "멈춥니다. 따로 상한을 두면 늘 작은 쪽만 남아서 여기서 고른 수가 " +
+                    "조용히 무시됩니다.",
                 fontSize = 12.sp,
                 color = m.sumi3
             )
             Spacer(Modifier.height(10.dp))
             Text(
-                "「익히는 중 상한」은 손에 쥐고 도는 카드 수입니다. 배웠는데 아직 익힘이 " +
-                    "아닌 카드가 이 수에 닿으면 새 카드가 나오지 않습니다 — 자리가 비는 " +
-                    "만큼만 새로 텁니다. 상한이 없으면 새 카드가 매일 0점으로 들어와 " +
-                    "먼저 배운 카드가 익힘까지 못 오릅니다. 복습 카드가 상한만큼은 돼야 " +
-                    "손에 쥔 카드가 하루 한 번씩 다 나옵니다.",
+                "0장으로 두면 새 단어가 나오지 않고 복습만 돕니다. 시험 직전처럼 " +
+                    "아는 것을 굳힐 때 쓰세요.",
                 fontSize = 12.sp,
                 color = m.sumi3
             )
@@ -267,6 +262,29 @@ private fun readCapped(ctx: Context, uri: Uri): String? = runCatching {
 }.getOrNull()
 
 private const val MAX_BACKUP = 4 shl 20
+
+/**
+ * 하루 몫이 실제로 무슨 뜻인지 적는 줄.
+ *
+ * 슬라이더 숫자만 보면 20장이 싸 보인다. 손에 쥔 카드가 `N × 문턱`에서 평형이 되고
+ * 그것들이 하루 한 번씩 도니까 실제로 푸는 장수는 그 열한 배다 — 숨기면 사흘 뒤에
+ * 밀린 판을 보고 고장으로 읽는다.
+ */
+@Composable
+private fun DailyCost(daily: Int) {
+    val m = LocalMasu.current
+    if (daily == 0) {
+        Text("새 단어 없이 복습만 돕니다.", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = m.ai)
+        return
+    }
+    val holding = daily * Srs.MASTERED_AT
+    Text(
+        "손에 쥐는 카드 ~${holding}장 · 하루 푸는 장수 ~${holding + daily}장",
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = m.ai
+    )
+}
 
 /** 켜기·끄기 한 줄. */
 @Composable

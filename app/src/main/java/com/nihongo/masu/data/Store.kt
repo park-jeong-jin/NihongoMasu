@@ -21,6 +21,24 @@ fun cardIds(scripts: List<Script>, kanji: Boolean = true): List<String> =
         VocabData.all.map { it.id }
 
 /**
+ * 카드 열쇠 → 등급 서수. 낮을수록 쉽다. 가나는 -1이라 N5보다 앞에 선다 —
+ * 가나를 모르는 채로 단어를 외우는 차례는 없다.
+ *
+ * 표를 한 번만 짜 둔다. 열쇠에는 등급이 안 들어 있어서([Word.id]가 `"V표기"`다)
+ * 되찾으려면 카드 6,668장을 훑어야 하는데, 하루 판을 깔 때마다 그 일을 한다.
+ */
+private val levels: Map<String, Int> by lazy {
+    HashMap<String, Int>(8192).apply {
+        KanaData.all.forEach { k -> Script.entries.forEach { put(k.id(it), -1) } }
+        KanjiData.all.forEach { put(it.id, it.level.ordinal) }
+        VocabData.all.forEach { put(it.id, it.level.ordinal) }
+    }
+}
+
+/** 카드 한 장의 등급 서수. 모르는 열쇠는 맨 뒤로 보낸다. */
+fun levelOf(id: String): Int = levels[id] ?: Int.MAX_VALUE
+
+/**
  * 화면을 밝게 볼지 어둡게 볼지. [SYSTEM]은 기기 설정을 따른다.
  *
  * 기본값이 [SYSTEM]이라 기기가 어두우면 앱도 어두워진다. 그게 싫은 사람이
@@ -40,46 +58,28 @@ class Settings(private val prefs: SharedPreferences) {
 
     /**
      * 값 하나. 읽기는 Compose 상태라 바꾸는 즉시 화면이 따라오고, 쓰기는 그 자리에서
-     * 파일에 남는다. [allow]가 거절한 값은 없던 일이 된다.
+     * 파일에 남는다.
      */
-    private inner class Pref<T>(initial: T, private val allow: (T) -> Boolean = { true }) {
+    private inner class Pref<T>(initial: T) {
         private val state = mutableStateOf(initial)
         operator fun getValue(owner: Any?, prop: KProperty<*>): T = state.value
         operator fun setValue(owner: Any?, prop: KProperty<*>, value: T) {
-            if (!allow(value)) return
             state.value = value
             save()
         }
     }
 
     /**
-     * 한 묶음에 낼 새 카드와 복습 카드 수. 둘을 따로 고른다 — 합만 정하면
-     * 복습이 그 안에서 얼마를 가져갈지는 손댈 수가 없다.
+     * 하루에 새로 틀 카드 수. 이 값 하나가 하루 공부를 정한다 — 새 단어가 이만큼
+     * 나오고, 복습은 오늘 나올 것이 다 나온다.
      *
-     * 둘 다 0으로 둘 수는 없다. 낼 문제가 없어진다.
-     */
-    var fresh: Int by Pref(
-        prefs.getInt(KEY_FRESH, Srs.DEFAULT_FRESH).coerceIn(COUNTS),
-        allow = { it != 0 || review != 0 }
-    )
-    var review: Int by Pref(
-        prefs.getInt(KEY_REVIEW, Srs.DEFAULT_REVIEW).coerceIn(COUNTS),
-        allow = { it != 0 || fresh != 0 }
-    )
-
-    /**
-     * 손에 쥐고 도는 「익히는 중」 카드의 상한. 넘으면 새 카드를 안 낸다.
-     * 왜 이 상한이 있는지는 [Srs.DEFAULT_LEARNING_CAP]에 적혀 있다.
+     * 복습 장수를 따로 고르지 않는 이유는 그 수가 이미 여기서 나오기 때문이다.
+     * 하루 N장이 열흘 만에 익힘에 오르므로 손에 쥔 카드가 `N × 10`에서 평형이 되고,
+     * 하루 푸는 장수도 거기서 정해진다 ([Srs.DEFAULT_DAILY]).
      *
-     * 0을 못 주는 이유는 그 값이 「새 카드를 영영 안 낸다」는 뜻이 되기 때문이다.
-     * 새 카드를 끄고 싶으면 [fresh]를 0으로 두는 자리가 이미 있다.
+     * 0은 새 단어를 끄고 복습만 하겠다는 뜻이다. 시험 직전처럼 아는 것을 굳힐 때 쓴다.
      */
-    var learningCap: Int by Pref(
-        prefs.getInt(KEY_CAP, Srs.DEFAULT_LEARNING_CAP).coerceIn(CAPS)
-    )
-
-    /** 한 묶음 크기. 큐 상한과 진행 막대의 분모가 쓴다. */
-    val batch: Int get() = fresh + review
+    var daily: Int by Pref(prefs.getInt(KEY_DAILY, Srs.DEFAULT_DAILY).coerceIn(COUNTS))
 
     /**
      * 단어·한자를 어느 방향으로 물을지. null이면 범위를 누를 때마다 물어본다.
@@ -129,13 +129,11 @@ class Settings(private val prefs: SharedPreferences) {
 
     private fun save() {
         prefs.edit()
-            .putInt(KEY_REVIEW, review)
+            .putInt(KEY_DAILY, daily)
             .putBoolean(KEY_SILENT, silent)
-            .putInt(KEY_FRESH, fresh)
             .putString(KEY_THEME, theme.name)
             .putBoolean(KEY_KANA, kana)
             .putBoolean(KEY_KANJI, kanji)
-            .putInt(KEY_CAP, learningCap)
             // null은 키를 지운다 — 「그때그때 고르기」가 그 상태다.
             .putString(KEY_ASK, ask?.name)
             .apply()
@@ -143,29 +141,19 @@ class Settings(private val prefs: SharedPreferences) {
 
     companion object {
         /**
-         * 한 묶음에 낼 수 있는 장수. 0은 그쪽을 안 하겠다는 뜻이다.
+         * 하루에 고를 수 있는 새 카드 수. 0은 새 단어를 안 트겠다는 뜻이다.
          *
-         * 30까지만 둔다 — 그보다 큰 묶음은 한 자리에 앉아 끝낼 수 없고,
-         * 더 하고 싶으면 「한 바퀴 더」로 사이클을 다시 돌리면 된다.
+         * 30까지만 둔다 — 하루 푸는 장수가 그 열한 배라 30장이면 하루 330장이고,
+         * 그 위는 지킬 수 없는 약속이다.
          */
         val COUNTS = 0..30
 
-        /**
-         * 익히는 중 카드의 상한으로 고를 수 있는 값. 아래를 5로 막는 것은 상한이
-         * 한 묶음보다 한참 작으면 새 카드가 거의 안 나오기 때문이고, 위를 60으로
-         * 막는 것은 손에 쥔 카드가 그보다 많으면 하루 몫으로 한 번씩 다 돌지
-         * 못해 문턱까지 걸리는 날수가 그만큼 늘어나기 때문이다.
-         */
-        val CAPS = 5..60
-
         private const val KEY_SILENT = "set_silent"
-        private const val KEY_FRESH = "set_fresh"
-        private const val KEY_REVIEW = "set_review"
+        private const val KEY_DAILY = "set_daily"
         private const val KEY_THEME = "set_theme"
         private const val KEY_ASK = "set_ask"
         private const val KEY_KANA = "set_kana"
         private const val KEY_KANJI = "set_kanji"
-        private const val KEY_CAP = "set_cap"
     }
 }
 
@@ -260,14 +248,28 @@ class Store(context: Context) {
         _round.value = Round.decode(prefs.getString(KEY_ROUND, null))
     }
 
-    // ── 오늘의 복습 판 ──
+    // ── 오늘의 공부 판 ──
 
     /** 오늘 것이면 돌고 있는 판, 아니면 null. 날짜는 읽는 자리에서 본다. */
     private fun todayRound(): Round? = _round.value?.takeIf { it.day == today() }
 
     /** 지금 깐다면 나올 목록. 아직 안 깔린 판을 **읽기만** 하는 자리가 쓴다. */
     private fun wouldBe(): List<String> =
-        Srs.round(activeCardIds, today()) { records[it] }
+        Srs.round(activeCardIds, today(), dailyLeft, ::levelOf) { records[it] }
+
+    /**
+     * 오늘 남은 새 단어 몫. 자정이 지나면 [freshToday]가 0을 주므로 저절로 찬다.
+     *
+     * 몫이 한 벌이라 오늘 공부 판과 범위 연습이 같은 수를 나눠 쓴다 — 단어 맞추기에서
+     * 새 단어를 스무 장 배우면 오늘 공부 판에는 새 단어가 안 뜬다. 두 자리가 따로
+     * 세면 하루 몫이 이름만 몫이 된다.
+     *
+     * **깔아 둔 판이 쥐고 있는 몫은 빼지 않는다.** 오늘 판을 깔아 두고(새 단어 스무
+     * 장이 그 안에 있다) 안 푼 채로 범위 연습에서 스무 장을 더 배우면 그날 마흔 장이
+     * 된다. 빼려면 판에 든 열쇠 수백 개에서 기록 없는 것을 매번 세야 하는데, 이 값은
+     * 홈이 그릴 때마다 읽는다. 몫이 한 번 새는 것보다 그리기가 무거워지는 쪽이 나쁘다.
+     */
+    val dailyLeft: Int get() = (settings.daily - freshToday).coerceAtLeast(0)
 
     /**
      * 오늘 판에 든 카드 열쇠들. 차례가 곧 물을 순서다.
@@ -280,13 +282,15 @@ class Store(context: Context) {
     val roundIds: List<String> get() = todayRound()?.ids ?: wouldBe()
 
     /**
-     * 홈 단추와 드로어에 적는 「오늘 복습」 남은 장수.
+     * 홈 단추와 드로어에 적는 「오늘 공부」 남은 장수.
      *
-     * 판이 안 깔렸으면 [countTodo]로 **세기만 한다.** [wouldBe]와 거르는 조건이
-     * 같은데 그쪽은 차례까지 정하느라 정렬을 하고 중간 목록을 셋 만든다 — 세는
-     * 자리에서는 다 버리는 일이다. 홈과 드로어가 그릴 때마다 부르는 값이다.
+     * 판이 안 깔렸으면 [countTodo]에 남은 몫을 더해 **세기만 한다.** [wouldBe]와 거르는
+     * 조건이 같은데 그쪽은 차례까지 정하느라 정렬을 하고 중간 목록을 여럿 만든다 —
+     * 세는 자리에서는 다 버리는 일이다. 홈과 드로어가 그릴 때마다 부르는 값이다.
+     *
+     * 몫을 더하지 않으면 아침에 「오늘 공부 0」이 떠 놓고 눌러야 새 단어가 나타난다.
      */
-    val roundLeft: Int get() = todayRound()?.left ?: countTodo(activeCardIds)
+    val roundLeft: Int get() = todayRound()?.left ?: (countTodo(activeCardIds) + dailyLeft)
 
     /**
      * 복습 판에 들어설 때 부른다. 오늘 판이 있으면 **그대로 돌려준다** — 하던 자리를

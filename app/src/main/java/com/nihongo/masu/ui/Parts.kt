@@ -394,13 +394,12 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
      * 새 묶음을 깐다. [queue]를 주지 않으면 [Srs.queue]가 점수 낮은 카드부터 뽑는다 —
      * 오답 노트는 이미 걸러 온 목록을 그대로 넘긴다.
      *
-     * [limit]은 「아직」만 걸러 들어온 판이 [Srs.freshRoom]으로 좁혀 넘긴다. 안 주면
-     * 설정의 묶음 크기다 — 지금까지의 모든 자리가 그쪽이다.
+     * [limit]은 「아직」만 걸러 들어온 판이 오늘 남은 몫으로 좁혀 넘긴다. 안 주면
+     * 범위 연습의 묶음 크기다 — 지금까지의 모든 자리가 그쪽이다.
      */
-    fun rebuild(queue: List<T>? = null, limit: Int = store.settings.batch) {
+    fun rebuild(queue: List<T>? = null, limit: Int = Srs.DEFAULT_BATCH) {
         val next = queue ?: Srs.queue(
-            pool(), limit, store.today(),
-            store.settings.fresh, store.settings.learningCap, idOf
+            pool(), limit, store.today(), store.dailyLeft, idOf
         ) { store.get(it) }
         _queue.value = next
         base = next.size
@@ -1049,28 +1048,25 @@ fun EmptyNote(message: String) {
 }
 
 /**
- * 낼 카드가 없을 때. 원인을 짚어 준다 — 「새 카드 0장으로 뒀다」와 「오늘 몫을 다
- * 끝냈다」가 화면에는 똑같이 빈 묶음으로 보여서, 단서가 없으면 고장으로 읽힌다.
- *
- * 익히는 중 상한은 여기서 말하지 않는다. 상한에 걸려도 복습 카드는 그대로 나오므로
- * 큐가 비지 않고, 이 글이 뜨는 자리가 아니다 — 그 상태는 「새 단어만 안 나온다」로
- * 보이고 설정 화면의 상한 설명이 맡는다.
+ * 낼 카드가 없을 때. 원인을 짚어 준다 — 「새 단어를 0장으로 뒀다」와 「오늘 몫을 다
+ * 텄다」가 화면에는 똑같이 빈 묶음으로 보여서, 단서가 없으면 고장으로 읽힌다.
  */
 @Composable
 fun NothingDue(store: Store, stage: Stage? = null) {
     val s = store.settings
     EmptyNote(
         when {
-            // 「아직」만 골라 들어왔으면 오늘 몫과 상관이 없다. 자정이 지나도 안 오르고,
-            // 손에 쥔 카드를 익혀서 자리를 비워야 나온다 — 그걸 말해 주지 않으면
-            // 「오늘 몫을 다 끝냈습니다」가 거짓이 된다.
-            stage == Stage.NEW ->
-                "지금 낼 새 카드가 없습니다.\n익히는 중인 카드가 이미 상한 " +
-                    "${s.learningCap}장입니다. 그것들을 익히면 자리가 비어 새 단어가 " +
-                    "나옵니다 — 상한은 설정에서 바꿉니다."
-            s.fresh == 0 ->
-                "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈고, 설정에서 새 카드를 0장으로 둬서 " +
+            s.daily == 0 && stage == Stage.NEW ->
+                "지금 낼 새 카드가 없습니다.\n설정에서 하루 새 단어를 0장으로 둬서 " +
                     "새 단어가 나오지 않습니다."
+            // 「아직」만 골라 들어온 판에는 복습 카드가 없다. 몫을 다 텄으면 그 판은
+            // 통째로 비고, 자정까지 기다리는 것 말고 할 일이 없다.
+            stage == Stage.NEW ->
+                "지금 낼 새 카드가 없습니다.\n오늘 몫 ${s.daily}장을 다 텄습니다. " +
+                    "자정이 지나면 다시 오릅니다."
+            s.daily == 0 ->
+                "지금 낼 카드가 없습니다.\n오늘 복습을 다 끝냈고, 설정에서 하루 새 단어를 " +
+                    "0장으로 둬서 새 단어가 나오지 않습니다."
             else ->
                 "지금 낼 카드가 없습니다.\n오늘 몫을 다 끝냈습니다. 자정이 지나면 다시 오릅니다."
         }

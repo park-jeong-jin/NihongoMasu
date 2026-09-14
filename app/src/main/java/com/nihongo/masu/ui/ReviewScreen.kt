@@ -22,6 +22,7 @@ import com.nihongo.masu.tts.Speaker
  * @param sub   목록 줄에 붙는 짧은 꼬리표(등급·읽기·방향)
  * @param speak 목록 줄을 눌렀을 때 나는 소리. 좁은 줄에 재생 단추를 여럿 박을 수
  *              없어서 목록은 이 한 방으로 남긴다
+ * @param rec   학습 기록. **오늘 판에 든 새 단어는 null이다** — 아직 한 번도 안 튼 카드다
  * @param says  정답면에 줄줄이 놓을 읽기·예시. 단어 맞추기와 같은 줄들이다
  * @param link  정답면 맨 아래 이어보기 줄
  */
@@ -30,7 +31,7 @@ private data class Row4(
     val glyph: String,
     val sub: String,
     val meaning: String,
-    val rec: Rec,
+    val rec: Rec?,
     val speak: String,
     val says: List<Say>,
     val link: LinkLine? = null
@@ -47,7 +48,7 @@ private data class Row4(
  * 전체」가 좁은 폭에서 잘린다.
  */
 private enum class Filter(val label: String) {
-    TODAY("오늘 복습"), LEARNING("익히는 중"), WEAK("자주 틀림"), WRONG("틀린 적"), ALL("전체")
+    TODAY("오늘 공부"), LEARNING("익히는 중"), WEAK("자주 틀림"), WRONG("틀린 적"), ALL("전체")
 }
 
 /**
@@ -59,47 +60,51 @@ private enum class Filter(val label: String) {
  * 한 줄을 눌러 발음을 듣고, 초기화해서 처음부터 다시 배울 수 있다.
  */
 /**
- * 기록이 있는 카드를 한 목록으로 합친다.
+ * 목록에 세울 카드를 한 벌로 합친다. 기록이 있는 카드와 [board]에 든 열쇠다.
+ *
+ * [board]를 따로 받는 이유는 오늘 판에 **새 단어**가 들어서다. 기록으로만 추리면
+ * 그 카드들이 줄도 못 만들고 조용히 빠져서, 홈이 「433장」이라 적어 놓고 413장이
+ * 깔린다. 카드 전체를 만들지 않는 것은 6,668줄을 다시 그릴 때마다 새로 짜기
+ * 때문이다 — 판에 든 스무 장만 더 만든다.
  *
  * remember로 묶지 않는다. 기록을 수정하면 맵의 크기는 그대로인데 값만
  * 바뀌는 경우가 있어서, 캐시해 두면 채점 결과가 화면에 늦게 반영된다.
  * 항목이 400개 남짓이라 매번 새로 만들어도 부담이 없다.
  */
-private fun rowsOf(store: Store): List<Row4> {
+private fun rowsOf(store: Store, board: Set<String> = emptySet()): List<Row4> {
     val out = ArrayList<Row4>()
+    fun recOf(id: String): Rec? = store.get(id)
+    fun skip(id: String) = store.get(id) == null && id !in board
     KanaData.all.forEach { k ->
         store.kanaScripts.forEach { sc ->
             val id = k.id(sc)
-            store.get(id)?.let { r ->
-                out.add(
-                    Row4(
-                        id, k.glyph(sc), "${k.r} · ${sc.label}", k.ko, r, k.glyph(sc),
-                        saysOf(k, sc)
-                    )
+            if (skip(id)) return@forEach
+            out.add(
+                Row4(
+                    id, k.glyph(sc), "${k.r} · ${sc.label}", k.ko, recOf(id), k.glyph(sc),
+                    saysOf(k, sc)
                 )
-            }
+            )
         }
     }
     // 한자·단어는 방향이 어느 쪽이든 기록이 한 벌이라 한 줄씩이다.
     store.kanjiCards.forEach { k ->
-        store.get(k.id)?.let { r ->
-            out.add(
-                Row4(
-                    k.id, k.c, "${k.level.label} · ${k.on}", k.mean, r, k.exRead,
-                    saysOf(k), linksOf(k)
-                )
+        if (skip(k.id)) return@forEach
+        out.add(
+            Row4(
+                k.id, k.c, "${k.level.label} · ${k.on}", k.mean, recOf(k.id), k.exRead,
+                saysOf(k), linksOf(k)
             )
-        }
+        )
     }
     VocabData.all.forEach { w ->
-        store.get(w.id)?.let { r ->
-            out.add(
-                Row4(
-                    w.id, w.w, "${w.level.label} · ${w.read}", w.mean, r, w.read,
-                    saysOf(w), linksOf(w)
-                )
+        if (skip(w.id)) return@forEach
+        out.add(
+            Row4(
+                w.id, w.w, "${w.level.label} · ${w.read}", w.mean, recOf(w.id), w.read,
+                saysOf(w), linksOf(w)
             )
-        }
+        )
     }
     return out
 }
@@ -122,15 +127,16 @@ private fun List<Row4>.by(kind: Filter, round: List<String>): List<Row4> {
             // 위 요약의 '익히는 중' 숫자와 같은 셈이다 (Store.countLearning).
             Filter.LEARNING -> Srs.isLearning(row.rec)
             Filter.WEAK -> Srs.isWeak(row.rec)
-            Filter.WRONG -> row.rec.ng > 0
-            else -> true
+            Filter.WRONG -> (row.rec?.ng ?: 0) > 0
+            // 「전체」는 **배운 카드** 전체다. 오늘 판에 끼어 든 새 단어는 여기 안 선다.
+            else -> row.rec != null
         }
-    }.sortedByDescending { it.rec.ng * 10 - it.rec.ok }
+    }.sortedByDescending { (it.rec?.ng ?: 0) * 10 - (it.rec?.ok ?: 0) }
 }
 
 /**
  * 목록 ↔ 연습 두 단계. 다른 기능과 달리 범위를 고르는 게 아니라
- * 갈래(오늘 복습·자주 틀림·틀린 적 있음·전체)를 고르는 것이 목록의 일이다.
+ * 갈래(오늘 공부·자주 틀림·틀린 적 있음·전체)를 고르는 것이 목록의 일이다.
  */
 @Composable
 fun ReviewFlow(
@@ -140,10 +146,13 @@ fun ReviewFlow(
     onOpen: () -> Unit,
     onClose: () -> Unit
 ) {
-    // 기본이 「오늘 복습」이다. 홈 단추가 목록을 안 거치고 바로 연습으로 들어오므로,
+    // 기본이 「오늘 공부」이다. 홈 단추가 목록을 안 거치고 바로 연습으로 들어오므로,
     // 여기 기본값이 곧 그 단추가 여는 판이다.
     var filter by remember { mutableStateOf(Filter.TODAY) }
-    val shown = rowsOf(store).by(filter, store.roundIds)
+    // 판을 한 번만 읽는다. 아직 안 깔린 판은 읽을 때마다 새로 세우므로(차례를 섞는다),
+    // 두 번 읽으면 줄을 만든 판과 차례를 정한 판이 서로 다른 목록이 된다.
+    val board = store.roundIds
+    val shown = rowsOf(store, board.toSet()).by(filter, board)
 
     if (practicing) {
         ReviewPractice(store, speaker, shown, filter, onClose)
@@ -182,14 +191,14 @@ private fun ReviewList(
             StatBox("자주 틀림", store.countWeak(store.activeCardIds).toString(), m.shu, Modifier.weight(1f))
         }
 
-        // 「오늘 복습」은 남은 장수를 적는다. 목록에는 판 전체가 서 있지만 단추가 여는
+        // 「오늘 공부」는 남은 장수를 적는다. 목록에는 판 전체가 서 있지만 단추가 여는
         // 것은 하던 자리부터라, 전체 장수를 적으면 눌러 들어간 화면의 「12 / 30」과
         // 어긋난다. 홈 단추와도 같은 수여야 한다.
         val left = if (filter == Filter.TODAY) store.roundLeft else shown.size
         if (left > 0) {
             Spacer(Modifier.height(14.dp))
             PrimaryButton(
-                if (filter == Filter.TODAY && left < shown.size) "이어서 복습 · ${left}장"
+                if (filter == Filter.TODAY && left < shown.size) "이어서 공부 · ${left}장"
                 else "${filter.label} ${left}장 연습하기",
                 onPractice,
                 Modifier.fillMaxWidth()
@@ -198,7 +207,7 @@ private fun ReviewList(
             // 판은 있는데 다 돈 날. 목록은 오늘 무엇을 돌았는지 보여주는 자리로 남고,
             // 단추 자리에는 왜 없는지가 선다 — 단추만 지우면 화면이 이유 없이 빈다.
             Spacer(Modifier.height(14.dp))
-            EmptyNote("오늘 복습을 다 끝냈습니다.\n자정이 지나면 새 판이 깔립니다.")
+            EmptyNote("오늘 몫을 다 끝냈습니다.\n자정이 지나면 새 판이 깔립니다.")
         }
 
         SectionLabel("${filter.label} ${shown.size}개")
@@ -207,8 +216,8 @@ private fun ReviewList(
             EmptyNote(
                 when (filter) {
                     Filter.TODAY ->
-                        "오늘 복습할 카드가 없습니다.\n오늘 몫을 다 했거나 아직 배운 카드가 없습니다. " +
-                            "자정이 지나면 새 판이 깔립니다."
+                        "오늘 공부할 카드가 없습니다.\n오늘 몫을 다 했거나 설정에서 하루 새 단어를 " +
+                            "0장으로 뒀습니다. 자정이 지나면 새 판이 깔립니다."
                     Filter.LEARNING -> "익히는 중인 카드가 없습니다.\n배운 카드가 다 익힘에 올랐습니다."
                     Filter.WEAK -> "자주 틀리는 카드가 없습니다.\n두 번 이상 틀린 카드가 여기 모입니다."
                     Filter.WRONG -> "틀린 카드가 없습니다."
@@ -238,13 +247,24 @@ private fun ReviewList(
                         modifier = Modifier.weight(1f)
                     )
                     Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            "틀림 ${row.rec.ng}",
-                            fontSize = 11.sp,
-                            color = m.shu,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text("맞음 ${row.rec.ok}", fontSize = 11.sp, color = m.sumi3)
+                        val rec = row.rec
+                        if (rec == null) {
+                            // 0/0을 적으면 한 번도 안 튼 카드가 「다 맞힌 카드」로 읽힌다.
+                            Text(
+                                "새 단어",
+                                fontSize = 11.sp,
+                                color = m.ai,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        } else {
+                            Text(
+                                "틀림 ${rec.ng}",
+                                fontSize = 11.sp,
+                                color = m.shu,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text("맞음 ${rec.ok}", fontSize = 11.sp, color = m.sumi3)
+                        }
                     }
                     Spacer(Modifier.width(10.dp))
                     Box(
@@ -331,7 +351,7 @@ private fun ReviewPractice(
     val session = rememberQuizSession(store, { r: Row4 -> r.id }) { rows }
     val verdict = session.verdict
 
-    // 「오늘 복습」만 저장되는 판이다. 나머지 갈래는 지금까지처럼 들어올 때의 목록을
+    // 「오늘 공부」만 저장되는 판이다. 나머지 갈래는 지금까지처럼 들어올 때의 목록을
     // 통으로 한 바퀴 돈다.
     val saved = filter == Filter.TODAY
 
@@ -342,7 +362,7 @@ private fun ReviewPractice(
     /**
      * 판을 연다.
      *
-     * 「오늘 복습」은 **하던 자리에서 이어 연다** — [Store.ensureRound]가 오늘 판이
+     * 「오늘 공부」는 **하던 자리에서 이어 연다** — [Store.ensureRound]가 오늘 판이
      * 있으면 그대로 주고, 없거나 어제 것이면 새로 깐다. 자정을 넘기면 저절로 새 판이다.
      * [rows]는 이미 그 판의 차례대로 온 목록이라 여기서 다시 세우지 않는다.
      *
@@ -380,7 +400,7 @@ private fun ReviewPractice(
     /**
      * 「한 바퀴 더」.
      *
-     * 「오늘 복습」은 판을 **새로 깐다** — 방금 통과한 카드는 오늘 몫을 한 것이라
+     * 「오늘 공부」는 판을 **새로 깐다** — 방금 통과한 카드는 오늘 몫을 한 것이라
      * 빠지고, 오늘 틀린 카드만 다시 모인다. 다 맞혔으면 빈 판이 되고 화면이 그렇게
      * 말한다. 예전처럼 돌던 목록을 섞어 다시 깔면 「오늘 남은 장수」가 계속 되살아나
      * 홈에 적힌 수가 줄지 않는다.
@@ -443,7 +463,7 @@ private fun ReviewPractice(
 
         if (row == null) {
             EmptyNote(
-                if (saved) "오늘 복습을 다 끝냈습니다.\n자정이 지나면 새 판이 깔립니다."
+                if (saved) "오늘 몫을 다 끝냈습니다.\n자정이 지나면 새 판이 깔립니다."
                 else "${filter.label} 카드가 없습니다."
             )
             return@ScreenColumn
@@ -470,7 +490,7 @@ private fun ReviewPractice(
                 AnswerFace(row.says, row.link, speaker, peek)
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    scoreLine(row.rec),
+                    row.rec?.let { scoreLine(it) } ?: "오늘 처음 보는 단어",
                     fontSize = 11.sp,
                     color = m.sumi3
                 )
