@@ -378,10 +378,15 @@ private fun ReviewPractice(
             // 목록이라 「한 바퀴 더」가 방금 깐 새 판을 아직 모른다 — 그대로 쓰면
             // 버린 판이 그 자리에서 다시 깔리고, 아래 저장이 새 판을 덮어쓴다.
             //
+            // 줄도 **방금 깐 판에 맞춰 다시 세운다.** [rows]는 아직 안 깔린 판을
+            // 미리 본 것이라 새 단어를 제 나름대로 뽑아 왔고, 실제로 깔린 판은 다른
+            // 스무 장일 수 있다. 그 줄을 그대로 쓰면 판에만 있고 목록에 없는 새
+            // 단어가 아래에서 통째로 흘러 나간다.
+            //
             // 목록에 없는 열쇠는 흘리고 자리도 그만큼 당긴다. 카드를 초기화하면
             // 기록이 없어져 그 줄이 안 만들어지는데, 자리를 그대로 두면 흘린 수만큼
             // 뒤로 밀려 그 앞 카드들을 건너뛴다.
-            val byId = rows.associateBy { it.id }
+            val byId = rowsOf(store, r.ids.toSet()).associateBy { it.id }
             val queue = ArrayList<Row4>(r.ids.size)
             var at = 0
             r.ids.forEachIndexed { i, id ->
