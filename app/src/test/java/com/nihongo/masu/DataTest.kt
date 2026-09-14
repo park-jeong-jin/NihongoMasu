@@ -68,8 +68,14 @@ class DataTest {
         // 카드 앞면은 はつか라고 가르치고 예문은 다르게 읽히니 학습자가 어느 쪽을 믿을 수 없다.
         val bad = VocabData.all.filter { w ->
             w.w in w.ex && w.w !in soundChange &&
-                listOfNotNull(w.read, w.read.removeSuffix("する"), w.read.dropLast(1))
-                    .none { it.isNotEmpty() && it in w.exRead }
+                // する는 예문에서 し·す·さ로 활용하므로 떼고도 본다. 다만 **표기가 する로
+                // 끝날 때만**이다 — 아무 때나 떼 주면 명사 표기에 する가 얹힌 읽기
+                // (`運動 = うんどうする`)가 이 문으로 새어 들어와 영영 안 걸린다.
+                listOfNotNull(
+                    w.read,
+                    w.read.dropLast(1),
+                    if (w.w.endsWith("する")) w.read.removeSuffix("する") else null
+                ).none { it.isNotEmpty() && it in w.exRead }
         }
         assertTrue("예문 읽기가 표제어 읽기와 다름: ${bad.map { Triple(it.w, it.read, it.exRead) }}", bad.isEmpty())
     }
