@@ -450,10 +450,17 @@ object Srs {
      * **마지막에 안 섞는 것**이 [queue]와 다른 점이다. 거기서는 묶음을 중간에
      * 그만두면 하필 새 카드만 못 보고 끝나는 것을 막으려고 섞는데, 이 판은 중간에
      * 그만둬도 잃는 것이 없다. 섞을 이유가 없어지면 약한 카드를 먼저 만나는 쪽이 낫다.
+     *
+     * **대신 정렬 전에 한 번 섞는다.** 같은 날 배운 카드는 점수도 마지막 날짜도 똑같아서,
+     * 안정 정렬이 그 덩어리를 넘겨받은 순서 그대로 — 곧 단어표 줄 순서대로 — 내놓는다.
+     * 「걷다」 다음에 「뛰다」가 나오면 답을 떠올린 게 아니라 표의 다음 줄을 떠올린 것이라,
+     * 외운 것처럼 보이는 판이 만들어진다. 섞어 두면 점수 차례는 그대로고 동점끼리만
+     * 매번 다른 차례로 선다.
      */
     fun round(ids: List<String>, today: Long, recOf: (String) -> Rec?): List<String> =
         ids.mapNotNull { id -> recOf(id)?.let { id to it } }
             .filterNot { isDoneToday(it.second, today) || isHeld(it.second, today) }
+            .shuffled()
             .sortedWith(compareBy({ it.second.score }, { it.second.last }))
             .map { it.first }
 

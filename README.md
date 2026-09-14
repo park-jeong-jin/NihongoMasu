@@ -540,7 +540,7 @@ JLPT 등급이 아닌 칸을 하나 둔 것은 목적이 다르기 때문이다.
 ```
 ./gradlew assembleDebug      # 디버그 APK
 ./gradlew installDebug       # 폰에 설치
-./gradlew testDebugUnitTest  # 단위 테스트 119개
+./gradlew testDebugUnitTest  # 단위 테스트 120개
 ```
 
 **JDK는 `~/.gradle/gradle.properties`의 `org.gradle.java.home`에 21로 못 박혀 있습니다**
@@ -587,7 +587,7 @@ Gradle 8.9가 JDK 22까지만 도는데 이 기기 기본 java가 25라, 못 박
 | `ui/RomajiScreen.kt` `DictationScreen.kt` | 문제 한 장씩. 자기 입력 위젯과 채점만 맡는다 |
 | `ui/WordQuizScreen.kt` | 단어·한자 맞추기와 「보기」. `ViewScreen`이 칩에 매달린 점수 판으로 `Store`에 점수를 놓는다 |
 | `ui/` | 나머지 화면들. 연습 기능마다 `XxxFlow` 안에 목록과 연습이 들어 있다 |
-| `src/test/` | 단위 테스트 119개 (JVM에서 바로 실행) |
+| `src/test/` | 단위 테스트 120개 (JVM에서 바로 실행) |
 
 `Srs.kt` `ShapeCompare.kt` `RomajiCheck.kt` `Search.kt` `Backup.kt`는 일부러 안드로이드
 API를 쓰지 않았습니다. 덕분에 기기 없이도 JVM에서 바로 테스트할 수 있고, `app/src/test/`가 그 값을

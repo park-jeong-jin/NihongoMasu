@@ -554,6 +554,19 @@ class SrsTest {
         )
     }
 
+    @Test fun `점수도 날짜도 같은 카드는 매번 다른 차례로 선다`() {
+        // 같은 날 배운 카드는 점수도 last도 똑같다. 안정 정렬만 쓰면 그 덩어리가
+        // 단어표 줄 순서 그대로 나와서, 「걷다」 다음 「뛰다」를 답이 아니라 표의
+        // 다음 줄로 떠올리게 된다.
+        val ids = (1..12).map { "동점$it" }
+        val recs = ids.associateWith { Rec(score = 3, last = today - 1) }
+
+        val seen = (1..20).map { Srs.round(ids, today) { recs[it] } }.toSet()
+        assertTrue("동점 카드 차례가 늘 같다", seen.size > 1)
+        // 섞어도 판에서 새는 카드는 없다.
+        seen.forEach { assertEquals(ids.toSet(), it.toSet()) }
+    }
+
     @Test fun `오늘 통과한 카드는 판에 안 든다`() {
         val recs = mapOf(
             "통과" to Rec(score = 2, last = today, fail = false),
