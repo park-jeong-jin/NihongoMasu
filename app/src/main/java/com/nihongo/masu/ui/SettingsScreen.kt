@@ -134,6 +134,32 @@ fun SettingsScreen(store: Store) {
             )
         }
 
+        SectionLabel("복습에서 뺀 카드")
+        MasuCard {
+            Text(
+                "「N일 동안 안 보기」를 ${Srs.CHALLENGE_DAYS.last()}일까지 올리고 한 번 더 " +
+                    "누르면 그 카드는 복습에서 빠집니다. 여기에 장수를 두면 그 무더기에서 " +
+                    "날마다 그만큼을 뽑아 하루치 복습에 섞습니다.",
+                fontSize = 12.sp,
+                color = m.sumi3
+            )
+
+            Spacer(Modifier.height(10.dp))
+            CountSlider("하루 되살릴 장수", s.revive) { s.revive = it }
+
+            Spacer(Modifier.height(10.dp))
+            ReviveNote(s.revive)
+
+            Spacer(Modifier.height(14.dp))
+            Text(
+                "뽑힌 카드를 맞히면 그대로 빠진 채로 남고 다음 날 다른 카드가 뽑힙니다. " +
+                    "틀리면 사다리가 처음으로 돌아가 아예 복습으로 돌아옵니다 — 잊은 " +
+                    "카드는 빼 둘 카드가 아닙니다.",
+                fontSize = 12.sp,
+                color = m.sumi3
+            )
+        }
+
         SectionLabel("소리")
         MasuCard {
             ToggleRow(
@@ -283,6 +309,22 @@ private fun DailyCost(daily: Int) {
         fontSize = 12.sp,
         fontWeight = FontWeight.SemiBold,
         color = m.ai
+    )
+}
+
+/**
+ * 되살리기가 켜져 있는지를 한 줄로 못 박는다. 0이 기본값이라 슬라이더가 왼쪽 끝에
+ * 있으면 이 칸 전체가 무슨 일을 하는 자리인지 알 수가 없다.
+ */
+@Composable
+private fun ReviveNote(revive: Int) {
+    val m = LocalMasu.current
+    Text(
+        if (revive == 0) "뺀 카드는 다시 나오지 않습니다."
+        else "뺀 카드 중 하루 ${revive}장이 복습에 섞입니다.",
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = if (revive == 0) m.sumi3 else m.ai
     )
 }
 

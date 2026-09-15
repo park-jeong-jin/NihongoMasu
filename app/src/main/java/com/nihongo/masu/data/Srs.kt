@@ -322,6 +322,28 @@ object Srs {
         )
     }
 
+    /**
+     * 사다리 끝까지 올려 복습에서 뺀 카드 중 **오늘 되살릴 [n]장.**
+     *
+     * 「영영 안 봄」이 진짜 영영이면 시험 전까지 한 번도 안 만난다. 뺀 것이 맞더라도
+     * 가끔 한 장씩 스쳐 지나가야 빠진 것을 알아챈다. [n]이 0이면 아무것도 안 되살린다 —
+     * 그게 기본값이라 이 설정을 안 건드린 사람에게는 사다리 끝이 예전 그대로다.
+     *
+     * [Random]의 씨앗이 [today]다. 같은 날에는 몇 번을 불러도 같은 [n]장이 나오고
+     * 자정이 지나면 저절로 다른 장이 된다 — 무엇을 뽑았는지 어디에도 안 적어도 된다.
+     * [round]가 오늘 차례를 정할 때 쓰는 수법과 같다.
+     *
+     * 되살린 카드는 [Rec.hold]를 안 건드린다. 맞히면 사다리 끝에 그대로 남아 내일은
+     * 다시 뽑기에 들어가고, 틀리면 [grade]가 칸과 [Rec.hold]를 처음으로 되돌려 아예
+     * 복습으로 돌아온다 — 잊은 카드는 빼 둘 카드가 아니다.
+     */
+    fun revived(ids: List<String>, recOf: (String) -> Rec?, today: Long, n: Int): Set<String> =
+        if (n <= 0) emptySet()
+        else ids.filter { recOf(it)?.hold == FOREVER }
+            .shuffled(Random(today))
+            .take(n)
+            .toHashSet()
+
     /** 맞힌 횟수보다 틀린 횟수가 많고 두 번 이상 틀린 카드 = 약한 카드. */
     fun isWeak(rec: Rec?): Boolean = rec != null && rec.ng >= 2 && rec.ng > rec.ok
 

@@ -92,6 +92,17 @@ class Settings(private val prefs: SharedPreferences) {
         runCatching { Ask.valueOf(prefs.getString(KEY_ASK, null) ?: "") }.getOrNull()
     )
 
+    /**
+     * 「복습에서 빼기」까지 올린 카드를 하루에 몇 장씩 도로 섞어 볼지.
+     *
+     * 기본이 0이라 안 건드리면 사다리 끝은 예전처럼 영영이다. 0보다 크면 뺀 카드
+     * 무더기에서 날마다 그만큼을 뽑아 그날 하루만 복습에 낸다 ([Srs.revived]).
+     *
+     * 하루 몫([daily])과 같은 0~30이다. 이쪽은 손에 쥔 카드를 늘리지 않으므로 —
+     * 뽑힌 카드는 하루가 지나면 도로 빠진다 — 상한을 따로 좁힐 이유가 없다.
+     */
+    var revive: Int by Pref(prefs.getInt(KEY_REVIVE, 0).coerceIn(COUNTS))
+
     /** 소리 없이 연습. 자동 재생만 끄고, 직접 누른 재생은 그대로 난다. */
     var silent: Boolean by Pref(prefs.getBoolean(KEY_SILENT, false))
 
@@ -133,6 +144,7 @@ class Settings(private val prefs: SharedPreferences) {
     private fun save() {
         prefs.edit()
             .putInt(KEY_DAILY, daily)
+            .putInt(KEY_REVIVE, revive)
             .putBoolean(KEY_SILENT, silent)
             .putString(KEY_THEME, theme.name)
             .putBoolean(KEY_KANA, kana)
@@ -153,6 +165,7 @@ class Settings(private val prefs: SharedPreferences) {
 
         private const val KEY_SILENT = "set_silent"
         private const val KEY_DAILY = "set_daily"
+        private const val KEY_REVIVE = "set_revive"
         private const val KEY_THEME = "set_theme"
         private const val KEY_ASK = "set_ask"
         private const val KEY_KANA = "set_kana"
@@ -260,7 +273,7 @@ class Store(context: Context) {
 
     /** 지금 깐다면 나올 목록. 아직 안 깔린 판을 **읽기만** 하는 자리가 쓴다. */
     private fun wouldBe(): List<String> =
-        Srs.round(activeCardIds, today(), dailyLeft, ::levelOf) { records[it] }
+        Srs.round(activeCardIds, today(), dailyLeft, ::levelOf, queueRecs())
 
     /**
      * 오늘 남은 새 단어 몫. 자정이 지나면 [freshToday]가 0을 주므로 저절로 찬다.
@@ -385,6 +398,9 @@ class Store(context: Context) {
         records.clear()
         records.putAll(recs)
         _days.value = days
+        // 얹은 기록은 열쇠가 같아도 사다리가 다르다. 안 비우면 되살린 적 없는 카드가
+        // 오늘 하루 치워 둔 채로 복습에 선다 — 아래 dropRound()와 같은 이유다.
+        revivedDay = -1L
         forgetUndo()
         // 판이 가리키던 카드가 통째로 바뀌었다. 남겨 두면 남의 기록 위에서 자리만
         // 이어져 「30장 중 12번째」가 아무 뜻이 없다.
@@ -396,6 +412,53 @@ class Store(context: Context) {
     }
 
     fun get(id: String): Rec? = records[id]
+
+    // ── 되살리기 ──
+
+    /** [revived]를 다시 센 날과 그때의 설정값. 둘 다 그대로면 센 것을 다시 쓴다. */
+    private var revivedDay: Long = -1L
+    private var revivedN: Int = -1
+    private var revivedIds: Set<String> = emptySet()
+
+    /**
+     * [day]에 되살아난 카드들. 필터+섞기가 6,600장을 훑으므로 날과 설정값이 그대로면
+     * 센 것을 그대로 준다.
+     *
+     * 가나·한자 스위치를 끄고 켜도 다시 세지는 않는다. 끈 카드는 어차피 통에 없어
+     * 뽑혀 있어도 아무 일이 없고, 켠 카드는 오늘 하루만 뽑기에서 빠졌다가 자정에
+     * 들어온다 — 그 하루를 맞추자고 스위치마다 6,600장을 다시 셀 일은 아니다.
+     *
+     * [restore]는 이 기억을 비운다. 남의 기록을 얹으면 열쇠는 그대로인데 사다리가
+     * 달라서, 안 비우면 되살린 적 없는 카드가 오늘 하루 치워 둔 채로 복습에 선다.
+     */
+    private fun revived(day: Long): Set<String> {
+        if (revivedDay != day || revivedN != settings.revive) {
+            revivedDay = day
+            revivedN = settings.revive
+            revivedIds = Srs.revived(activeCardIds, records::get, day, settings.revive)
+        }
+        return revivedIds
+    }
+
+    /**
+     * 복습 큐를 짤 때 쓰는 기록 조회 함수. 오늘 되살아난 카드만 [Rec.hold]를 내려서 준다.
+     *
+     * **저장된 기록은 안 건드린다.** 되살리기는 「오늘 하루 한 번 보여 준다」이지
+     * 「빼 둔 것을 푼다」가 아니라서, 파일에 쓰면 내일도 모레도 나온다. 여기서
+     * 한 장만 거짓말하면 [Srs.queue]·[Srs.round]·[countTodo]가 쓰는 걸림돌
+     * ([Srs.isHeld]) 하나가 같이 풀려서, 카드를 내는 길 전부가 한 자리로 모인다.
+     *
+     * 채점은 [grade]가 [records]의 **진짜** 기록 위에 하므로, 맞히면 사다리 끝이
+     * 그대로 남고 틀리면 [Srs.grade]가 알아서 복습으로 되돌린다.
+     *
+     * **한 벌을 받아 두고 카드마다 부른다.** 날짜와 되살린 목록을 여기서 한 번만
+     * 쥐고 가는 것이 요점이다 — 카드마다 [today]를 다시 물으면 통을 한 번 훑을 때마다
+     * [LocalDate.now]가 6,668번 돈다.
+     */
+    fun queueRecs(): (String) -> Rec? {
+        val live = revived(today())
+        return { id -> records[id]?.let { if (id in live) it.copy(hold = 0L) else it } }
+    }
 
     /**
      * 오늘. 기기 시간대의 자정을 경계로 센다. 밀리초를 86400000으로 나누면
@@ -529,8 +592,9 @@ class Store(context: Context) {
      */
     fun countTodo(ids: List<String>): Int {
         val t = today()
+        val recOf = queueRecs()
         return ids.count { id ->
-            val r = records[id]
+            val r = recOf(id)
             r != null && !Srs.isDoneToday(r, t) && !Srs.isHeld(r, t)
         }
     }

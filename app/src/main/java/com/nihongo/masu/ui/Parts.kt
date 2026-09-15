@@ -399,8 +399,8 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
      */
     fun rebuild(queue: List<T>? = null, limit: Int = Srs.DEFAULT_BATCH) {
         val next = queue ?: Srs.queue(
-            pool(), limit, store.today(), store.dailyLeft, idOf
-        ) { store.get(it) }
+            pool(), limit, store.today(), store.dailyLeft, idOf, store.queueRecs()
+        )
         _queue.value = next
         base = next.size
         _index.intValue = 0
@@ -460,12 +460,15 @@ class QuizSession<T>(private val store: Store, val verdict: Verdict) {
         _total.intValue++
         if (rating.pass) _ok.intValue++
         // 못 넘긴 카드는 그 자리에서 몇 장 뒤에 한 번 더 묻는다.
-        else _queue.value = Srs.requeue(
-            queue, index, store.today(), pool = pool,
-            limit = base * Srs.SESSION_CAP,
-            idOf = idOf,
-            recOf = { store.get(idOf(it)) }
-        )
+        else {
+            val rec = store.queueRecs()
+            _queue.value = Srs.requeue(
+                queue, index, store.today(), pool = pool,
+                limit = base * Srs.SESSION_CAP,
+                idOf = idOf,
+                recOf = { rec(idOf(it)) }
+            )
+        }
     }
 
     /**

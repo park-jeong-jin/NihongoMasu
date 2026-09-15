@@ -740,6 +740,24 @@ class SrsTest {
         }
     }
 
+    @Test fun `되살리기는 뺀 카드에서만 날마다 정해진 장수를 뽑는다`() {
+        val gone = Rec(score = 30, ok = 30, step = Srs.CHALLENGE_DAYS.size + 1, hold = Srs.FOREVER)
+        val recs = (1..10).associate { "뺌$it" to gone } +
+            mapOf("치움" to gone.copy(hold = today + 3), "그냥" to Rec(score = 4))
+        val ids = recs.keys.toList()
+
+        val picked = Srs.revived(ids, recs::get, today, 3)
+        assertEquals(3, picked.size)
+        assertTrue("뺀 카드만 뽑는다", picked.all { it.startsWith("뺌") })
+
+        // 씨앗이 날짜라 같은 날엔 몇 번을 불러도 같은 장이 나온다 — 어디에도 안 적는 근거다.
+        assertEquals(picked, Srs.revived(ids, recs::get, today, 3))
+        assertNotEquals("자정이 지나면 다른 장이 뽑힌다", picked, Srs.revived(ids, recs::get, today + 1, 3))
+
+        assertEquals("0장이면 끄는 것이다", emptySet<String>(), Srs.revived(ids, recs::get, today, 0))
+        assertEquals("뺀 카드보다 많이 달라 해도 있는 만큼만", 10, Srs.revived(ids, recs::get, today, 30).size)
+    }
+
     @Test fun `손으로 점수를 놓으면 복습에서 뺀 카드가 돌아온다`() {
         val gone = Rec(score = 30, ok = 30, step = Srs.CHALLENGE_DAYS.size + 1, hold = Srs.FOREVER)
         val back = Srs.setScore(gone, 6)
