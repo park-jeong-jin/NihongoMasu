@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
@@ -61,7 +62,12 @@ data class Say(
      * 끊어 둔 예문. 있으면 [text] 위에 눌러 볼 수 있는 일본어 줄이 서고,
      * [text]에는 읽기와 뜻만 담는다 — 일본어 줄을 두 군데서 그리지 않는다.
      */
-    val tokens: List<Tok>? = null
+    val tokens: List<Tok>? = null,
+    /**
+     * 접어 둘 내용. [text] 아래에 접힌 채 서고 눌러야 펴진다.
+     * 답을 옆에 펴 두면 떠올리기 전에 눈이 먼저 가서, 떠올려야 보이는 것만 여기 담는다.
+     */
+    val fold: String = ""
 )
 
 /**
@@ -101,7 +107,10 @@ private fun sayable(s: String) =
  */
 fun saysOf(w: Word): List<Say> = listOf(
     Say("읽기", w.read),
-    Say("예문", "${w.exRead}\n${w.exMean}", w.exRead, TokenData.of(w))
+    // 예문의 읽기와 뜻은 접어 둔다. 단어 뒷면에서 읽을 것은 예문 그 자체인데
+    // 후리가나와 번역이 같이 서 있으면 문장을 읽어 보기 전에 답부터 읽게 된다.
+    // 둘을 한 번에 편다 — 문장 하나를 두고 떠올리는 것이라 손도 한 번이면 된다.
+    Say("예문", "", w.exRead, TokenData.of(w), "${w.exRead}\n${w.exMean}")
 )
 
 /**
@@ -239,20 +248,68 @@ private fun SayRow(say: Say, peek: MutableState<Peek?>, onSpeak: (String) -> Uni
                         if (picked == i) null else Peek(say.label, i, tok = say.tokens[i])
                 }
             }
-            Text(
-                say.text,
-                fontFamily = JpFont,
-                fontSize = 16.sp,
-                lineHeight = 24.sp,
-                color = m.sumi,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (say.text.isNotBlank()) {
+                Text(
+                    say.text,
+                    fontFamily = JpFont,
+                    fontSize = 16.sp,
+                    lineHeight = 24.sp,
+                    color = m.sumi,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (say.fold.isNotBlank()) FoldLine(say.fold)
         }
         // 구성 설명처럼 읽어줄 게 없는 줄은 단추 대신 같은 폭을 비워 둔다.
         // 그래야 여러 줄의 본문 왼쪽 끝이 그대로 맞는다.
         if (say.speak.isBlank()) Spacer(Modifier.width(48.dp))
         else IconButton(onClick = { onSpeak(say.speak) }) {
             Icon(Icons.Filled.PlayArrow, "${say.label} 발음 듣기", tint = m.ai)
+        }
+    }
+}
+
+/**
+ * 접어 둔 자리. 눌러야 펴진다.
+ *
+ * 접힌 자리에는 무엇이 들었는지만 적는다 — 「보기」 한 마디만 있으면 펴기 전에는
+ * 무엇이 나올지 몰라서, 떠올려 보고 누르는 것이 아니라 일단 누르게 된다.
+ *
+ * 카드가 넘어가면 도로 접혀야 하므로 [body]를 기억 열쇠로 쓴다 — 다음 카드는
+ * 예문이 다르다.
+ */
+@Composable
+private fun FoldLine(body: String) {
+    val m = LocalMasu.current
+    var open by remember(body) { mutableStateOf(false) }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .pressSurface(
+                RoundedCornerShape(6.dp),
+                onClickLabel = if (open) "읽기와 뜻 접기" else "읽기와 뜻 보기"
+            ) { open = !open }
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            if (open) "\u25BE" else "\u25B8",
+            fontSize = 11.sp,
+            color = m.sumi3,
+            modifier = Modifier.width(16.dp).padding(top = 3.dp)
+        )
+        if (open) {
+            Text(
+                body,
+                fontFamily = JpFont,
+                fontSize = 16.sp,
+                lineHeight = 24.sp,
+                color = m.sumi,
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            Text("읽기 · 뜻", fontSize = 13.sp, color = m.sumi3)
         }
     }
 }
