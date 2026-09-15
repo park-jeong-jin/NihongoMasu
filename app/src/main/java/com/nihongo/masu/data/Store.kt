@@ -101,9 +101,12 @@ class Settings(private val prefs: SharedPreferences) {
      * 히라가나·가타카나를 이미 아는 사람에게는 208장이 영영 안 채워지는 분모로
      * 남아 익힘 비율이 100%에 닿지 않는다. 그 사람이 끌 스위치가 이것 하나다.
      *
-     * 메뉴는 건드리지 않는다 — 가나 맞추기와 스피드의 서체 판은 끈 뒤에도
-     * 그대로 열린다. 안 외우기로 한 것과 한 번 훑어보는 것은 다른 일이다.
-     * 히라만·가타만 하고 싶은 것은 가나 맞추기의 범위 고르기가 맡는다.
+     * 메뉴 줄과 홈 타일의 「가나 맞추기」도 함께 사라진다 (`ui/App.kt`의 `features()`).
+     * 끈 것이 화면에 그대로 서 있으면 껐다는 말이 무슨 뜻인지가 흐려진다.
+     *
+     * **스피드의 서체 판은 안 건드린다.** 그쪽은 기록을 안 남기는 1분짜리 게임이라
+     * 복습 범위와 다른 축이다. 히라만·가타만 하고 싶은 것도 여전히 가나 맞추기의
+     * 범위 고르기가 맡는다 — 켜 둔 채로 좁히는 자리다.
      */
     var kana: Boolean by Pref(prefs.getBoolean(KEY_KANA, true))
 
@@ -177,8 +180,10 @@ class Store(context: Context) {
     private val records: SnapshotStateMap<String, Rec> = mutableStateMapOf()
 
     /**
-     * 복습에 낼 가나. 설정에서 가나를 끄면 빈다. 메뉴는 이걸 보지 않는다 —
-     * 가나 맞추기는 끈 뒤에도 [Script.entries] 전부를 그대로 낸다.
+     * 복습에 낼 가나. 설정에서 가나를 끄면 빈다.
+     *
+     * 끄면 메뉴와 홈 타일에서 「가나 맞추기」도 함께 사라진다 — 그쪽은 `Feature`가
+     * 화면 쪽 것이라 `ui/App.kt`의 `features()`가 같은 설정을 보고 거른다.
      */
     val kanaScripts: List<Script>
         get() = if (settings.kana) Script.entries else emptyList()

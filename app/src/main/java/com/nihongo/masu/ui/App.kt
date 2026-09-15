@@ -52,6 +52,25 @@ enum class Feature(val label: String) {
 }
 
 /**
+ * 설정이 켜 둔 기능만. 가나나 한자를 복습에서 빼면 **그 연습도 함께 사라진다** —
+ * 드로어 줄도, 홈 타일도, 홈 큰 단추가 기본으로 여는 자리도.
+ *
+ * 예전에는 메뉴가 이 설정을 안 봤다. 안 외우기로 한 것과 한 번 훑어보는 것은
+ * 다른 일이라고 봐서였는데, 실제로는 가나를 끈 사람에게 「가나 맞추기 시작」이
+ * 큰 단추로 서 있었다. 끈 것이 화면에서 안 사라지면 껐다는 말이 무슨 뜻인지가
+ * 흐려진다. 다시 켜면 그대로 돌아오므로 잃는 것은 없다.
+ *
+ * [Feature.SELF]는 여기서 절대 안 빠진다 — 부르는 쪽이 `first()`를 기본으로 쓴다.
+ */
+fun features(s: Settings): List<Feature> = Feature.entries.filter {
+    when (it) {
+        Feature.KANA -> s.kana
+        Feature.KANJI -> s.kanji
+        else -> true
+    }
+}
+
+/**
  * 화면 한 장.
  *
  * 기능마다 '범위 고르기 → 연습' 두 단계뿐이라 이 셋이면 충분하다. 뒤로가기는
@@ -164,7 +183,7 @@ fun App(store: Store, speaker: Speaker) {
                 }
 
                 DrawerRow("오늘", here == Screen.Home) { openFromDrawer(Screen.Home) }
-                Feature.entries.forEach { f ->
+                features(store.settings).forEach { f ->
                     DrawerRow(f.label, here.feature == f) { openFromDrawer(Screen.Menu(f)) }
                 }
 
@@ -410,12 +429,13 @@ private fun TodayNum(label: String, n: Int) {
 fun HomeScreen(store: Store, go: (Screen) -> Unit) {
     val m = LocalMasu.current
 
-    // 가나를 복습에서 뺐어도 타일은 그대로 있다. 그래서 여기서는 설정을 보지 않고
-    // 서체 두 벌을 다 센다 — 타일에 달린 막대는 이 카드들의 기록 그대로다.
+    // 타일에 달린 막대는 서체 두 벌의 기록 그대로다. 가나를 끄면 타일 자체가
+    // 사라지므로(shown) 여기서 다시 설정을 볼 일은 없다.
     val kanaIds = remember { KanaData.all.flatMap { k -> Script.entries.map { k.id(it) } } }
     val wordIds = remember { VocabData.all.map { it.id } }
     val kanjiIds = remember { KanjiData.all.map { it.id } }
 
+    val shown = features(store.settings)
     val allCardIds = store.activeCardIds
     // 홈 단추에 적는 수와 단추가 여는 판은 같은 한 벌이어야 한다 —
     // 「30장」이라 적어 놓고 이백 장이 깔리던 자리다 (Srs.Round).
@@ -443,13 +463,15 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
                 // 화면에 안 나타난다. 범위 목록과 같은 막대를 써서 첫날부터 움직이게 한다.
                 StageBar(stages, allCardIds.size)
                 Spacer(Modifier.height(14.dp))
+                // 오늘 낼 것이 없으면 아무 데나 열어 준다. 가나를 끈 사람에게
+                // 「가나 맞추기 시작」이 서 있으면 안 되므로 남아 있는 첫 기능이다.
+                val idle = shown.first()
                 PrimaryButton(
-                    if (due > 0) "오늘 공부 시작 · ${due}장"
-                    else "${Feature.KANA.label} 시작",
+                    if (due > 0) "오늘 공부 시작 · ${due}장" else "${idle.label} 시작",
                     {
                         go(
                             if (due > 0) Screen.Practice(Feature.REVIEW)
-                            else Screen.Menu(Feature.KANA)
+                            else Screen.Menu(idle)
                         )
                     },
                     Modifier.fillMaxWidth()
@@ -496,7 +518,7 @@ fun HomeScreen(store: Store, go: (Screen) -> Unit) {
                 if (weak > 0) "자주 틀리는 카드 ${weak}장" else "자주 틀리는 카드 없음",
                 null, 0, m.shu
             )
-        )
+        ).filter { it.feature in shown }
 
         // 폭이 좁으면 정사각 타일이 둘씩 들어가면서 안이 텅 빈다. 좁을 때는 한 줄짜리
         // 행으로 눕히고, 폭이 나올 때만 격자로 편다. 600dp는 흔한 접이식 기준이기도 하다 —
