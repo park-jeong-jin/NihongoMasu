@@ -496,7 +496,7 @@ private fun ReviewPractice(
                 Spacer(Modifier.height(12.dp))
                 // 단어 맞추기와 같은 줄들. 음독·훈독·예문이 줄마다 따로 소리 난다 —
                 // 한 방으로 뭉쳐 두면 여기서만 예시 읽기밖에 못 듣는다.
-                AnswerFace(row.says, row.link, speaker, peek)
+                AnswerFace(row.says, row.link, speaker, peek, store.settings.silent)
                 Spacer(Modifier.height(10.dp))
                 Text(
                     row.rec?.let { scoreLine(it) } ?: "오늘 처음 보는 단어",

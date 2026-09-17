@@ -350,7 +350,7 @@ private fun WordQuizScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                 }
-                AnswerFace(card.says, card.link, speaker, peek)
+                AnswerFace(card.says, card.link, speaker, peek, store.settings.silent)
             } else {
                 Spacer(Modifier.height(20.dp))
                 Text(card.hint, fontSize = 13.sp, color = m.sumi3, textAlign = TextAlign.Center)
@@ -531,7 +531,7 @@ private fun ViewScreen(
                 Spacer(Modifier.height(12.dp))
                 // 맞추기 정답면과 같은 줄들이다. 읽기·예문이 줄마다 따로 소리 나고
                 // 이어보기 칩도 그대로 붙는다.
-                AnswerFace(card.says, card.link, speaker, peek)
+                AnswerFace(card.says, card.link, speaker, peek, store.settings.silent)
             }
         }
 

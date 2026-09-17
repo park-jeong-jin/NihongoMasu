@@ -295,7 +295,7 @@ fun App(store: Store, speaker: Speaker) {
                                 WordQuizFlow(store, speaker, CardKind.KANJI, practicing, open) { pop() }
                             // 범위 고르기 단계가 없어 practicing·open을 안 쓴다 —
                             // 등급은 화면 안 세그먼트다.
-                            Feature.CLOZE -> ClozeScreen(speaker) { pop() }
+                            Feature.CLOZE -> ClozeScreen(speaker, store.settings.silent) { pop() }
                             Feature.SPEED -> SpeedFlow(store, practicing, open) { pop() }
                             Feature.REVIEW -> ReviewFlow(store, speaker, practicing, open) { pop() }
                         }

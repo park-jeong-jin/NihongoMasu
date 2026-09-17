@@ -33,9 +33,11 @@ import com.nihongo.masu.tts.Speaker
  * 범위 고르기 화면을 따로 두지 않는다 — 고를 것이 JLPT 등급 하나뿐이라
  * 세그먼트 한 줄을 보려고 화면을 한 장 더 넘기게 된다. 그래서 [Screen.Practice]가
  * 아니라 [Screen.Menu] 한 단계로 산다.
+ *
+ * @param silent 「소리 없이 연습」. 기록이 아니라 소리 설정이라 [Store] 대신 값만 받는다.
  */
 @Composable
-fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
+fun ClozeScreen(speaker: Speaker, silent: Boolean, onBack: () -> Unit) {
     val m = LocalMasu.current
 
     var level by remember { mutableStateOf(Level.N5) }
@@ -174,7 +176,7 @@ fun ClozeScreen(speaker: Speaker, onBack: () -> Unit) {
                 AnswerDivider()
                 Spacer(Modifier.height(14.dp))
                 Column(Modifier.padding(horizontal = 14.dp)) {
-                    AnswerFace(saysOf(word), linksOf(word), speaker, peek)
+                    AnswerFace(saysOf(word), linksOf(word), speaker, peek, silent)
                 }
             }
         }

@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -67,7 +68,14 @@ data class Say(
      * 접어 둘 내용. [text] 아래에 접힌 채 서고 눌러야 펴진다.
      * 답을 옆에 펴 두면 떠올리기 전에 눈이 먼저 가서, 떠올려야 보이는 것만 여기 담는다.
      */
-    val fold: String = ""
+    val fold: String = "",
+    /**
+     * 카드를 뒤집을 때 저절로 날 줄인지. 카드마다 많아야 하나다.
+     *
+     * 한자에는 없다 — 음독도 훈독도 여럿이라 하나를 골라 읽어 주면 고르지 않은 쪽은
+     * 없는 것이 된다. 이어보기 칩을 눌러야 소리가 나게 둔 것과 같은 이유다.
+     */
+    val auto: Boolean = false
 )
 
 /**
@@ -106,7 +114,7 @@ private fun sayable(s: String) =
  * 위한 코드가 되어, 둘 중 하나는 거짓말이 된다.
  */
 fun saysOf(w: Word): List<Say> = listOf(
-    Say("읽기", w.read),
+    Say("읽기", w.read, auto = true),
     // 예문의 읽기와 뜻은 접어 둔다. 단어 뒷면에서 읽을 것은 예문 그 자체인데
     // 후리가나와 번역이 같이 서 있으면 문장을 읽어 보기 전에 답부터 읽게 된다.
     // 둘을 한 번에 편다 — 문장 하나를 두고 떠올리는 것이라 손도 한 번이면 된다.
@@ -126,7 +134,7 @@ fun saysOf(k: Kanji): List<Say> = listOfNotNull(
 
 /** 가나는 읽을 것이 로마자와 한글음뿐이다. 소리는 글자 그 자체다. */
 fun saysOf(kana: Kana, script: Script): List<Say> =
-    listOf(Say("읽기", "${kana.r} · ${kana.ko}", kana.glyph(script)))
+    listOf(Say("읽기", "${kana.r} · ${kana.ko}", kana.glyph(script), auto = true))
 
 /**
  * 표기에 든 한자. 히라가나뿐인 단어는 빈 줄이 되어 뜨지 않는다.
@@ -187,9 +195,32 @@ data class Peek(
 fun rememberPeek(vararg keys: Any?): MutableState<Peek?> =
     remember(*keys) { mutableStateOf<Peek?>(null) }
 
-/** 정답면 아래쪽 — 읽기 줄들과 이어보기 한 줄. 누른 것은 [PeekCard]가 받는다. */
+/**
+ * 정답면 아래쪽 — 읽기 줄들과 이어보기 한 줄. 누른 것은 [PeekCard]가 받는다.
+ *
+ * 뒤집는 순간 [Say.auto]가 붙은 줄을 저절로 읽어 준다 — 단어와 가나의 읽기다.
+ * 표기를 보는 순간과 소리가 붙어야 소리로도 남는다 — 재생 단추를 눌러야 들리면
+ * 급할 때 그냥 넘기게 되고, 그렇게 외운 단어는 귀로 들으면 모르는 단어가 된다.
+ *
+ * @param silent 「소리 없이 연습」. 자동 재생만 막고 눌러서 내는 소리는 그대로 난다.
+ */
 @Composable
-fun AnswerFace(says: List<Say>, link: LinkLine?, speaker: Speaker, peek: MutableState<Peek?>) {
+fun AnswerFace(
+    says: List<Say>,
+    link: LinkLine?,
+    speaker: Speaker,
+    peek: MutableState<Peek?>,
+    silent: Boolean
+) {
+    // 카드를 가르는 것은 읽기가 아니라 [says] 전체다 — 「有る・在る」처럼 읽기가
+    // 같고 뜻만 다른 단어가 목록에 나란히 붙어 있어서, 읽을 말만 열쇠로 두면
+    // 둘째 장에서 소리가 안 난다. 목록을 그릴 때마다 새로 만들어도 [Say]가 data class라
+    // 값으로 같으면 한 번만 난다.
+    // 엔진 초기화가 비동기라 [Speaker.ready]도 같이 둔다 (`DictationScreen`과 같은 이유).
+    val first = says.firstOrNull { it.auto && it.speak.isNotBlank() }?.speak
+    LaunchedEffect(says, speaker.ready, silent) {
+        if (!silent && speaker.ready && first != null) speaker.speak(first)
+    }
     says.forEach { say -> SayRow(say, peek) { speaker.speak(it) } }
     if (link != null) LinkRow(link, peek) { speaker.speak(it) }
 }
